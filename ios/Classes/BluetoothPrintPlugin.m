@@ -238,7 +238,6 @@
             // CGFloat maxWidth = 100.0; // Adjust the maximum width as needed
             // CGSize originalSize = image.size;
             // CGFloat scaleFactor = maxWidth / originalSize.width;
-            // CGSize targetSize = CGSizeMake(originalSize.width * scaleFactor, originalSize.height * scaleFactor);
 
             // Define the maximum width and height
             CGFloat maxWidth = [width floatValue] / 2;
@@ -247,8 +246,7 @@
             // Calculate the target size while maintaining the original aspect ratio
             CGSize originalSize = image.size;
             CGFloat scaleFactor = maxWidth / originalSize.width;
-            // CGFloat scaleFactor = MIN(maxWidth / originalSize.width, maxHeight / originalSize.height);
-            CGSize scaledSize = CGSizeMake(originalSize.width * scaleFactor, originalSize.height * scaleFactor);
+            CGSize targetSize = CGSizeMake(originalSize.width * scaleFactor, originalSize.height * scaleFactor);
 
             // Check if the scaled height exceeds the maximum height for cropping
             if (scaledSize.height > maxHeight) {
