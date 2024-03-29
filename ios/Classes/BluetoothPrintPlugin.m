@@ -235,39 +235,31 @@
         }else if([@"image" isEqualToString:type]){
             NSData *decodeData = [[NSData alloc] initWithBase64EncodedString:content options:0];
             UIImage *image = [UIImage imageWithData:decodeData];
-            // CGFloat maxWidth = 100.0; // Adjust the maximum width as needed
-            // CGSize originalSize = image.size;
-            // CGFloat scaleFactor = maxWidth / originalSize.width;
 
-            // Define the maximum width and height
             CGFloat maxWidth = [width floatValue] / 2;
-            CGFloat maxHeight = [height floatValue] / 2;
 
-            // Calculate the target size while maintaining the original aspect ratio
             CGSize originalSize = image.size;
             CGFloat scaleFactor = maxWidth / originalSize.width;
-            CGSize targetSize = CGSizeMake(originalSize.width * scaleFactor, originalSize.height * scaleFactor);
+            CGSize scaledSize = CGSizeMake(originalSize.width * scaleFactor, originalSize.height * scaleFactor);
 
-            // Check if the scaled height exceeds the maximum height for cropping
-            if (scaledSize.height > maxHeight) {
-                // Crop the middle part of the image
-                CGFloat yOffset = (scaledSize.height - maxHeight) / 2.0;
-                CGRect cropRect = CGRectMake(0, yOffset, scaledSize.width, maxHeight);
+            if (scaledSize.height > scaledSize.width) {
+                CGFloat yOffset = (scaledSize.height - scaledSize.width) / 2.0;
+                CGRect cropRect = CGRectMake(0, yOffset, scaledSize.width, scaledSize.width);
                 CGImageRef croppedImageRef = CGImageCreateWithImageInRect([image CGImage], cropRect);
                 UIImage *croppedImage = [UIImage imageWithCGImage:croppedImageRef];
                 CGImageRelease(croppedImageRef);
                 
                 // Update the image and scaled size
                 image = croppedImage;
-                scaledSize = CGSizeMake(scaledSize.width, maxHeight);
+                scaledSize = CGSizeMake(scaledSize.width, scaledSize.width);
             }
 
             // Create a renderer with the calculated target size
-            UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:targetSize];
+            UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:scaledSize];
 
             // Render the image and get a new data representation
             NSData *renderedImageData = [renderer JPEGDataWithCompressionQuality:1 actions:^(UIGraphicsImageRendererContext * _Nonnull context) {
-                [image drawInRect:CGRectMake(0, 0, targetSize.width, targetSize.height)];
+                [image drawInRect:CGRectMake(0, 0, scaledSize.width, scaledSize.height)];
             }];
             UIImage *resizedImage = [UIImage imageWithData:renderedImageData];
             [command addOriginrastBitImage:resizedImage];
