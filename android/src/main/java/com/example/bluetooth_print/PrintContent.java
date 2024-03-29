@@ -93,8 +93,8 @@ public class PrintContent {
                         Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
                         
                         // Define the maximum width and height
-                        float maxWidth = Float.parseFloat(width); // Adjust as needed
-                        float maxHeight = Float.parseFloat(height); // Adjust as needed
+                        float maxWidth = width; // Adjust as needed
+                        float maxHeight = height; // Adjust as needed
 
                         // Calculate the scale factor based on the maximum dimensions
                         float scaleFactor = maxWidth / bitmap.getWidth();
