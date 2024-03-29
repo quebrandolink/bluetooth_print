@@ -91,7 +91,27 @@ public class PrintContent {
                   }else if("image".equals(type)){
                         byte[] bytes = Base64.decode(content, Base64.DEFAULT);
                         Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                        esc.addRastBitImage(bitmap, 576, 0);
+                        
+                        // Define the maximum width and height
+                        float maxWidth = Float.parseFloat(width); // Adjust as needed
+                        float maxHeight = Float.parseFloat(height); // Adjust as needed
+
+                        // Calculate the scale factor based on the maximum dimensions
+                        float scaleFactor = maxWidth / bitmap.getWidth();
+                        // float scaleFactor = Math.min(maxWidth / bitmap.getWidth(), maxHeight / bitmap.getHeight());
+
+                        // Calculate the target width and height after scaling
+                        int targetWidth = (int) (bitmap.getWidth() * scaleFactor);
+                        int targetHeight = (int) (bitmap.getHeight() * scaleFactor);
+
+                        // Check if the scaled height exceeds the maximum height for cropping
+                        if (targetHeight > maxHeight) {
+                        // Crop the image to maintain the aspect ratio and fit within the maximum height
+                        int startY = (targetHeight - (int) maxHeight) / 2;
+                              bitmap = Bitmap.createBitmap(bitmap, 0, startY, targetWidth, (int) maxHeight);
+                        }
+                        
+                        esc.addRastBitImage(bitmap, width, 0);
                   }
 
                   if(linefeed == 1){
