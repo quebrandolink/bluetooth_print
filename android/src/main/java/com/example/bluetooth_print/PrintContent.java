@@ -91,12 +91,6 @@ public class PrintContent {
                   }else if("image".equals(type)){
                         byte[] bytes = Base64.decode(content, Base64.DEFAULT);
                         Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                        
-                        // Define the maximum width and height
-                        float maxWidth = width; // Adjust as needed
-                        float maxHeight = height; // Adjust as needed
-
-                        float scaleFactor = maxWidth / bitmap.getWidth();
 
                         if(bitmap.getHeight() > bitmap.getWidth()){
                               // Crop the image to maintain the aspect ratio and fit within the maximum height
