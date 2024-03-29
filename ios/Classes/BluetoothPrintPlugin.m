@@ -242,16 +242,16 @@
             CGFloat scaleFactor = maxWidth / originalSize.width;
             CGSize scaledSize = CGSizeMake(originalSize.width * scaleFactor, originalSize.height * scaleFactor);
 
-            if (scaledSize.height > scaledSize.width) {
-                CGFloat yOffset = (scaledSize.height - scaledSize.width) / 2.0;
-                CGRect cropRect = CGRectMake(0, yOffset, scaledSize.width, scaledSize.width);
+            if (originalSize.height > originalSize.width) {
+                CGFloat yOffset = (originalSize.height - originalSize.width) / 2.0;
+                CGRect cropRect = CGRectMake(0, yOffset, originalSize.width, originalSize.width);
                 CGImageRef croppedImageRef = CGImageCreateWithImageInRect([image CGImage], cropRect);
                 UIImage *croppedImage = [UIImage imageWithCGImage:croppedImageRef];
+                CGSize croppedSize = croppedImage.size;
                 CGImageRelease(croppedImageRef);
-                
-                // Update the image and scaled size
                 image = croppedImage;
-                scaledSize = CGSizeMake(scaledSize.width, scaledSize.width);
+
+                scaledSize = CGSizeMake(croppedSize.width * scaleFactor, croppedSize.height * scaleFactor);
             }
 
             // Create a renderer with the calculated target size
