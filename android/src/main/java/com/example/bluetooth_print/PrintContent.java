@@ -111,7 +111,7 @@ public class PrintContent {
                               bitmap = Bitmap.createBitmap(bitmap, 0, startY, targetWidth, (int) maxHeight);
                         }
                         
-                        esc.addRastBitImage(bitmap, width, 0);
+                        esc.addRastBitImage(bitmap, targetWidth, 0);
                   }
 
                   if(linefeed == 1){
