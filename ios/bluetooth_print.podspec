@@ -17,7 +17,7 @@ A new flutter plugin project.
   s.public_header_files = 'Classes/**/*.h'
   s.static_framework = true
   s.dependency 'Flutter'
-  s.platform = :ios, '8.0'
+  s.platform = :ios, '12.0'
 
   # 引入Classes文件夹下所有的*.a库
   s.frameworks = ["SystemConfiguration", "CoreTelephony","WebKit"]
