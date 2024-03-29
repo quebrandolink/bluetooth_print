@@ -96,22 +96,15 @@ public class PrintContent {
                         float maxWidth = width; // Adjust as needed
                         float maxHeight = height; // Adjust as needed
 
-                        // Calculate the scale factor based on the maximum dimensions
                         float scaleFactor = maxWidth / bitmap.getWidth();
-                        // float scaleFactor = Math.min(maxWidth / bitmap.getWidth(), maxHeight / bitmap.getHeight());
 
-                        // Calculate the target width and height after scaling
-                        int targetWidth = (int) (bitmap.getWidth() * scaleFactor);
-                        int targetHeight = (int) (bitmap.getHeight() * scaleFactor);
-
-                        // Check if the scaled height exceeds the maximum height for cropping
-                        if (targetHeight > maxHeight) {
-                        // Crop the image to maintain the aspect ratio and fit within the maximum height
-                        int startY = (targetHeight - (int) maxHeight) / 2;
-                              bitmap = Bitmap.createBitmap(bitmap, 0, startY, targetWidth, (int) maxHeight);
+                        if(bitmap.getHeight() > bitmap.getWidth()){
+                              // Crop the image to maintain the aspect ratio and fit within the maximum height
+                              int startY = (bitmap.getHeight() - bitmap.getWidth()) / 2;
+                              bitmap = Bitmap.createBitmap(bitmap, 0, startY, bitmap.getWidth(), bitmap.getWidth());
                         }
                         
-                        esc.addRastBitImage(bitmap, targetWidth, 0);
+                        esc.addRastBitImage(bitmap, width, 0);
                   }
 
                   if(linefeed == 1){
