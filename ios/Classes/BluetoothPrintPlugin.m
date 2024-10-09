@@ -130,7 +130,22 @@
      } @catch(FlutterError *e) {
        result(e);
      }
-  }
+  }else if([@"sendRawData" isEqualToString:call.method]) {
+    @try {
+        // Get the raw data from the call arguments
+        NSString *base64Data = [call arguments][@"data"];
+        
+        // Decode the base64 data to NSData
+        NSData *dataToSend = [[NSData alloc] initWithBase64EncodedString:base64Data options:0];
+        
+        // Send the data to the printer
+        [Manager write:dataToSend];
+        
+        result(nil);
+    } @catch(FlutterError *e) {
+        result(e);
+    }
+}
 }
 
 -(NSData *)mapToTscCommand:(NSDictionary *) args {
