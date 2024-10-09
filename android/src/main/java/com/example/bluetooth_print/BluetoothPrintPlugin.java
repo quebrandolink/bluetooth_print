@@ -216,6 +216,9 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
       case "printTest":
         printTest(result);
         break;
+      case "sendRawData":
+        sendRawData(call, result);
+        break;
       default:
         result.notImplemented();
         break;
@@ -401,6 +404,37 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
     });
 
   }
+
+  private void sendRawData(MethodCall call, Result result) {
+    Map<String, Object> args = call.arguments();
+    
+    if (args != null && args.containsKey("data")) {
+      List<Integer> dataList = (List<Integer>) args.get("data");
+      byte[] data = new byte[dataList.size()];
+      for (int i = 0; i < dataList.size(); i++) {
+        data[i] = (byte) (int) dataList.get(i);
+      }
+
+      final DeviceConnFactoryManager deviceConnFactoryManager = DeviceConnFactoryManager.getDeviceConnFactoryManagers().get(curMacAddress);
+      if (deviceConnFactoryManager == null || !deviceConnFactoryManager.getConnState()) {
+        result.error("not_connected", "Printer is not connected", null);
+        return;
+      }
+
+      threadPool = ThreadPool.getInstantiation();
+      threadPool.addSerialTask(new Runnable() {
+        @Override
+        public void run() {
+          deviceConnFactoryManager.sendByteDataImmediately(data);
+        }
+      });
+
+      result.success(true);
+    } else {
+      result.error("invalid_argument", "Argument 'data' not found", null);
+    }
+  }
+
 
   @SuppressWarnings("unchecked")
   private void print(MethodCall call, Result result) {
