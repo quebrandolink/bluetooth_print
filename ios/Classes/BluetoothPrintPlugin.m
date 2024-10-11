@@ -9,6 +9,8 @@
 @property(nonatomic, retain) BluetoothPrintStreamHandler *stateStreamHandler;
 @property(nonatomic, assign) int stateID;
 @property(nonatomic) NSMutableDictionary *scannedPeripherals;
+
+@property(nonatomic, copy) void (^state)(ConnectState state);
 @end
 
 @implementation BluetoothPrintPlugin
@@ -132,20 +134,44 @@
      }
   }else if([@"sendRawData" isEqualToString:call.method]) {
     @try {
-        // Get the raw data from the call arguments
-        NSString *base64Data = [call arguments][@"data"];
+        NSArray *dataList = [call arguments][@"data"];
         
-        // Decode the base64 data to NSData
-        NSData *dataToSend = [[NSData alloc] initWithBase64EncodedString:base64Data options:0];
+        if (![dataList isKindOfClass:[NSArray class]]) {
+            result([FlutterError errorWithCode:@"INVALID_ARGUMENT"
+                                       message:@"Data must be a list of integers."
+                                       details:nil]);
+            return;
+        }
+        
+        NSMutableData *dataToSend = [NSMutableData data];
+        for (NSNumber *number in dataList) {
+            if (![number isKindOfClass:[NSNumber class]]) {
+                result([FlutterError errorWithCode:@"INVALID_ARGUMENT"
+                                           message:@"Data list must contain only integers."
+                                           details:nil]);
+                return;
+            }
+            uint8_t byte = [number unsignedCharValue];
+            [dataToSend appendBytes:&byte length:1];
+        }
         
         // Send the data to the printer
-        [Manager write:dataToSend];
+        BOOL writeSuccess = [Manager write:dataToSend];
+        
+        if (!writeSuccess) {
+            result([FlutterError errorWithCode:@"WRITE_FAILED"
+                                       message:@"Failed to send data to the printer."
+                                       details:nil]);
+            return;
+        }
         
         result(nil);
-    } @catch(FlutterError *e) {
-        result(e);
+    } @catch(NSException *exception) {
+        result([FlutterError errorWithCode:@"UNEXPECTED_ERROR"
+                                   message:exception.reason
+                                   details:nil]);
     }
-}
+  }
 }
 
 -(NSData *)mapToTscCommand:(NSDictionary *) args {
