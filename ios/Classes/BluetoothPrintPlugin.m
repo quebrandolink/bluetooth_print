@@ -10,9 +10,6 @@
 @property(nonatomic, assign) int stateID;
 @property(nonatomic) NSMutableDictionary *scannedPeripherals;
 
-// Add the missing `state` property
-@property(nonatomic, readwrite, copy) void (^state)(ConnectState state);
-
 @end
 
 @implementation BluetoothPrintPlugin
@@ -135,7 +132,7 @@
      } @catch(FlutterError *e) {
        result(e);
      }
-  } else if([@"addOpenCashDrawer" isEqualToString:call.method]) {
+  } else if([@"openCashDrawer" isEqualToString:call.method]) {
     @try {
         NSDictionary *args = [call arguments];
         NSNumber *mParam = args[@"m"];
