@@ -153,14 +153,7 @@
         
         // Send the command to the printer
         [Manager write:commandData];
-        
-        if (!writeSuccess) {
-            result([FlutterError errorWithCode:@"WRITE_FAILED"
-                                       message:@"Failed to send open cash drawer command to the printer."
-                                       details:nil]);
-            return;
-        }
-        
+
         result(nil);
     } @catch(NSException *exception) {
         result([FlutterError errorWithCode:@"UNEXPECTED_ERROR"
