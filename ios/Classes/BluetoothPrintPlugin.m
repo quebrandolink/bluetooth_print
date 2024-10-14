@@ -11,7 +11,7 @@
 @property(nonatomic) NSMutableDictionary *scannedPeripherals;
 
 // Add the missing `state` property
-@property(nonatomic, copy) void (^state)(ConnectState state);
+@property(nonatomic, readwrite, copy) void (^state)(ConnectState state);
 
 @end
 
@@ -135,45 +135,6 @@
      } @catch(FlutterError *e) {
        result(e);
      }
-  } else if([@"sendRawData" isEqualToString:call.method]) {
-    @try {
-        NSArray *dataList = [call arguments][@"data"];
-        
-        if (![dataList isKindOfClass:[NSArray class]]) {
-            result([FlutterError errorWithCode:@"INVALID_ARGUMENT"
-                                       message:@"Data must be a list of integers."
-                                       details:nil]);
-            return;
-        }
-        
-        NSMutableData *dataToSend = [NSMutableData data];
-        for (NSNumber *number in dataList) {
-            if (![number isKindOfClass:[NSNumber class]]) {
-                result([FlutterError errorWithCode:@"INVALID_ARGUMENT"
-                                           message:@"Data list must contain only integers."
-                                           details:nil]);
-                return;
-            }
-            uint8_t byte = [number unsignedCharValue];
-            [dataToSend appendBytes:&byte length:1];
-        }
-        
-        // Send the data to the printer
-        BOOL writeSuccess = [Manager write:dataToSend];
-        
-        if (!writeSuccess) {
-            result([FlutterError errorWithCode:@"WRITE_FAILED"
-                                       message:@"Failed to send data to the printer."
-                                       details:nil]);
-            return;
-        }
-        
-        result(nil);
-    } @catch(NSException *exception) {
-        result([FlutterError errorWithCode:@"UNEXPECTED_ERROR"
-                                   message:exception.reason
-                                   details:nil]);
-    }
   } else if([@"addOpenCashDrawer" isEqualToString:call.method]) {
     @try {
         NSDictionary *args = [call arguments];
@@ -190,7 +151,7 @@
         
         // Create EscCommand and add open cash drawer command
         EscCommand *command = [[EscCommand alloc] init];
-        [command addaddOpenCashDawer:[mParam intValue] :[t1Param intValue] :[t2Param intValue]];
+        [command addaddOpenCashDrawer:[mParam intValue] :[t1Param intValue] :[t2Param intValue]];
         NSData *commandData = [command getCommand];
         
         // Send the command to the printer
