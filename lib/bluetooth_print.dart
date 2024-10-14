@@ -1,5 +1,5 @@
 import 'dart:async';
-
+import 'dart:io' show Platform;
 import 'package:flutter/services.dart';
 import 'package:rxdart/rxdart.dart';
 
@@ -148,10 +148,29 @@ class BluetoothPrint {
 
   Future<dynamic> printTest() => _channel.invokeMethod('printTest');
 
-  Future<bool> openCashDrawer() {
-    // ESC/POS command to kick the cash drawer
-    List<int> command = [0x1B, 0x70, 0x00, 0x19, 0xFA];
-    _channel.invokeMethod('sendRawData', {'data': command});
-    return Future.value(true);
+  Future<bool> openCashDrawer({int m = 0, int t1 = 25, int t2 = 250}) async {
+    try {
+      if (Platform.isAndroid) {
+        // ESC/POS command to kick the cash drawer
+        List<int> command = [0x1B, 0x70, m, t1, t2];
+        await _channel.invokeMethod('sendRawData', {'data': command});
+        print('Open cash drawer command sent successfully on Android.');
+      } else if (Platform.isIOS) {
+        // Call the openCashDrawer method on iOS
+        await _channel.invokeMethod('openCashDrawer', {
+          'm': m, // Cash drawer pin number (commonly 0 or 1)
+          't1': t1, // High-level pulse time in milliseconds
+          't2': t2, // Low-level pulse time in milliseconds
+        });
+        print('Open cash drawer command sent successfully on iOS.');
+      } else {
+        print('Unsupported platform.');
+        return false;
+      }
+      return true;
+    } on PlatformException catch (e) {
+      print("Failed to open cash drawer: '${e.message}'.");
+      return false;
+    }
   }
 }

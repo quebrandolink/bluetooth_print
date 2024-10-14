@@ -10,10 +10,13 @@
 @property(nonatomic, assign) int stateID;
 @property(nonatomic) NSMutableDictionary *scannedPeripherals;
 
+// Add the missing `state` property
 @property(nonatomic, copy) void (^state)(ConnectState state);
+
 @end
 
 @implementation BluetoothPrintPlugin
+
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
   FlutterMethodChannel* channel = [FlutterMethodChannel
       methodChannelWithName:NAMESPACE @"/methods"
@@ -47,7 +50,7 @@
     result(@(isConnected));
   } else if([@"isOn" isEqualToString:call.method]) {
     result(@(YES));
-  }else if([@"startScan" isEqualToString:call.method]) {
+  } else if([@"startScan" isEqualToString:call.method]) {
       NSLog(@"getDevices method -> %@", call.method);
       [self.scannedPeripherals removeAllObjects];
       
@@ -125,14 +128,14 @@
      } @catch(FlutterError *e) {
        result(e);
      }
-  }else if([@"printTest" isEqualToString:call.method]) {
+  } else if([@"printTest" isEqualToString:call.method]) {
      @try {
        
        result(nil);
      } @catch(FlutterError *e) {
        result(e);
      }
-  }else if([@"sendRawData" isEqualToString:call.method]) {
+  } else if([@"sendRawData" isEqualToString:call.method]) {
     @try {
         NSArray *dataList = [call arguments][@"data"];
         
@@ -171,8 +174,46 @@
                                    message:exception.reason
                                    details:nil]);
     }
+  } else if([@"addOpenCashDrawer" isEqualToString:call.method]) {
+    @try {
+        NSDictionary *args = [call arguments];
+        NSNumber *mParam = args[@"m"];
+        NSNumber *t1Param = args[@"t1"];
+        NSNumber *t2Param = args[@"t2"];
+        
+        if (!mParam || !t1Param || !t2Param) {
+            result([FlutterError errorWithCode:@"INVALID_ARGUMENT"
+                                       message:@"Missing parameters m, t1, or t2."
+                                       details:nil]);
+            return;
+        }
+        
+        // Create EscCommand and add open cash drawer command
+        EscCommand *command = [[EscCommand alloc] init];
+        [command addaddOpenCashDawer:[mParam intValue] :[t1Param intValue] :[t2Param intValue]];
+        NSData *commandData = [command getCommand];
+        
+        // Send the command to the printer
+        BOOL writeSuccess = [Manager write:commandData];
+        
+        if (!writeSuccess) {
+            result([FlutterError errorWithCode:@"WRITE_FAILED"
+                                       message:@"Failed to send open cash drawer command to the printer."
+                                       details:nil]);
+            return;
+        }
+        
+        result(nil);
+    } @catch(NSException *exception) {
+        result([FlutterError errorWithCode:@"UNEXPECTED_ERROR"
+                                   message:exception.reason
+                                   details:nil]);
+    }
+  } else {
+    result(FlutterMethodNotImplemented);
   }
 }
+
 
 -(NSData *)mapToTscCommand:(NSDictionary *) args {
     NSDictionary *config = [args objectForKey:@"config"];
