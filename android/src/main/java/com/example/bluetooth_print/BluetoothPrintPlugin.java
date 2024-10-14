@@ -216,9 +216,9 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
       case "printTest":
         printTest(result);
         break;
-      case "sendRawData":
-        sendRawData(call, result);
-        break;
+      case "openCashDrawer":
+          openCashDrawer(result);
+          break;
       default:
         result.notImplemented();
         break;
@@ -405,36 +405,27 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
 
   }
 
-  private void sendRawData(MethodCall call, Result result) {
-    Map<String, Object> args = call.arguments();
-    
-    if (args != null && args.containsKey("data")) {
-      List<Integer> dataList = (List<Integer>) args.get("data");
-      byte[] data = new byte[dataList.size()];
-      for (int i = 0; i < dataList.size(); i++) {
-        data[i] = (byte) (int) dataList.get(i);
-      }
-
+  private void openCashDrawer(Result result) {
       final DeviceConnFactoryManager deviceConnFactoryManager = DeviceConnFactoryManager.getDeviceConnFactoryManagers().get(curMacAddress);
       if (deviceConnFactoryManager == null || !deviceConnFactoryManager.getConnState()) {
-        result.error("not_connected", "Printer is not connected", null);
-        return;
+          result.error("not_connected", "Printer is not connected", null);
+          return;
       }
 
       threadPool = ThreadPool.getInstantiation();
       threadPool.addSerialTask(new Runnable() {
-        @Override
-        public void run() {
-          deviceConnFactoryManager.sendByteDataImmediately(data);
-        }
+          @Override
+          public void run() {
+              try {
+                  byte[] openDrawerCommand = new byte[]{0x1B, 0x70, 0x00, (byte) 0xFF, (byte) 0xFF}; // ESC/POS command for opening the cash drawer
+                  deviceConnFactoryManager.sendByteDataImmediately(openDrawerCommand);
+                  result.success(true);
+              } catch (Exception e) {
+                  result.error("open_cash_drawer_error", e.getMessage(), null);
+              }
+          }
       });
-
-      result.success(true);
-    } else {
-      result.error("invalid_argument", "Argument 'data' not found", null);
-    }
   }
-
 
   @SuppressWarnings("unchecked")
   private void print(MethodCall call, Result result) {
@@ -473,6 +464,8 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
     }
 
   }
+
+  
 
   @Override
   public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {

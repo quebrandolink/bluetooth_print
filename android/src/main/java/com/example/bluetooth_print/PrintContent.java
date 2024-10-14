@@ -112,7 +112,7 @@ public class PrintContent {
             esc.addPrintAndFeedLines((byte) 1);
 
             // 开钱箱
-            esc.addGeneratePlus(LabelCommand.FOOT.F2, (byte) 255, (byte) 255);
+            // esc.addGeneratePlus(LabelCommand.FOOT.F2, (byte) 255, (byte) 255);
             //开启切刀
             esc.addCutPaper();
             //添加缓冲区打印完成查询

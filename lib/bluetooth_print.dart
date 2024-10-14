@@ -151,9 +151,7 @@ class BluetoothPrint {
   Future<bool> openCashDrawer({int m = 0, int t1 = 25, int t2 = 250}) async {
     try {
       if (Platform.isAndroid) {
-        // ESC/POS command to kick the cash drawer
-        List<int> command = [0x1B, 0x70, m, t1, t2];
-        await _channel.invokeMethod('sendRawData', {'data': command});
+        await _channel.invokeMethod('openCashDrawer');
         print('Open cash drawer command sent successfully on Android.');
       } else if (Platform.isIOS) {
         // Call the openCashDrawer method on iOS
