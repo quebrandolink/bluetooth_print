@@ -148,11 +148,11 @@
         
         // Create EscCommand and add open cash drawer command
         EscCommand *command = [[EscCommand alloc] init];
-        [command addaddOpenCashDrawer:[mParam intValue] :[t1Param intValue] :[t2Param intValue]];
+        [command addOpenCashDawer:[mParam intValue] :[t1Param intValue] :[t2Param intValue]];
         NSData *commandData = [command getCommand];
         
         // Send the command to the printer
-        BOOL writeSuccess = [Manager write:commandData];
+        [Manager write:commandData];
         
         if (!writeSuccess) {
             result([FlutterError errorWithCode:@"WRITE_FAILED"

@@ -83,7 +83,7 @@
  * @param t1          高电平时间
  * @param t2          低电平时间
  */
--(void) addOpenCashDrawer:(int) m :(int) t1 :(int) t2;
+-(void) addOpenCashDawer:(int) m :(int) t1 :(int) t2;
 
 /**
  * 方法说明：蜂鸣器
