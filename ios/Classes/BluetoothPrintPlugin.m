@@ -266,88 +266,46 @@
            [command addQRCodeSavewithpL:pl withpH:0    withcn:49 withyfn:80 withm:48 withData:[content dataUsingEncoding:NSASCIIStringEncoding]];
            [command addQRCodePrintwithpL:3 withpH:pl+3 withcn:49 withyfn:81 withm:48];
         }else if([@"image" isEqualToString:type]){
-          NSData *decodeData = [[NSData alloc] initWithBase64EncodedString:content options:0];
-          UIImage *image = [UIImage imageWithData:decodeData];
+            NSData *decodeData = [[NSData alloc] initWithBase64EncodedString:content options:0];
+            UIImage *image = [UIImage imageWithData:decodeData];
 
-          CGFloat maxWidth = [width floatValue] / 2.0;
+            CGFloat maxWidth = [width floatValue] / 2;
 
-          CGSize originalSize = image.size;
-          CGFloat scaleFactor = maxWidth / originalSize.width;
-          CGSize scaledSize = CGSizeMake(originalSize.width * scaleFactor, originalSize.height * scaleFactor);
+            CGSize originalSize = image.size;
+            CGFloat scaleFactor = maxWidth / originalSize.width;
+            CGSize scaledSize = CGSizeMake(originalSize.width * scaleFactor, originalSize.height * scaleFactor);
 
-          // Crop portrait to square if needed
-          if (originalSize.height > originalSize.width) {
-              CGFloat yOffset = (originalSize.height - originalSize.width) / 2.0;
-              CGRect cropRect = CGRectMake(0, yOffset, originalSize.width, originalSize.width);
-              CGImageRef croppedImageRef = CGImageCreateWithImageInRect([image CGImage], cropRect);
-              UIImage *croppedImage = [UIImage imageWithCGImage:croppedImageRef];
-              CGImageRelease(croppedImageRef);
-              image = croppedImage;
-              CGSize croppedSize = image.size;
-              scaledSize = CGSizeMake(croppedSize.width * scaleFactor, croppedSize.height * scaleFactor);
-          }
+            if (originalSize.height > originalSize.width) {
+                CGFloat yOffset = (originalSize.height - originalSize.width) / 2.0;
+                CGRect cropRect = CGRectMake(0, yOffset, originalSize.width, originalSize.width);
+                CGImageRef croppedImageRef = CGImageCreateWithImageInRect([image CGImage], cropRect);
+                UIImage *croppedImage = [UIImage imageWithCGImage:croppedImageRef];
+                CGSize croppedSize = croppedImage.size;
+                CGImageRelease(croppedImageRef);
+                image = croppedImage;
 
-          // Resize the image
-          UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:scaledSize];
-          UIImage *resizedImage = [renderer imageWithActions:^(UIGraphicsImageRendererContext * _Nonnull context) {
-              [image drawInRect:CGRectMake(0, 0, scaledSize.width, scaledSize.height)];
-          }];
+                scaledSize = CGSizeMake(croppedSize.width * scaleFactor, croppedSize.height * scaleFactor);
+            }
 
-          // Convert to monochrome
-          UIImage *monochromeImage = [self convertToMonochrome:resizedImage];
-          [command addOriginrastBitImage:monochromeImage];
+            // Create a renderer with the calculated target size
+            UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:scaledSize];
+
+            // Render the image and get a new data representation
+            NSData *renderedImageData = [renderer JPEGDataWithCompressionQuality:1 actions:^(UIGraphicsImageRendererContext * _Nonnull context) {
+                [image drawInRect:CGRectMake(0, 0, scaledSize.width, scaledSize.height)];
+            }];
+            UIImage *resizedImage = [UIImage imageWithData:renderedImageData];
+            [command addOriginrastBitImage:resizedImage];
         }
         
         if([linefeed isEqualToNumber:@1]){
             [command addPrintAndLineFeed];
         }
+       
     }
     
     [command addPrintAndFeedLines:4];
     return [command getCommand];
-}
-
-- (UIImage *)convertToMonochrome:(UIImage *)image {
-    CGSize size = image.size;
-    CGRect imageRect = CGRectMake(0, 0, size.width, size.height);
-
-    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceGray();
-    CGContextRef grayContext = CGBitmapContextCreate(NULL,
-                                                     size.width,
-                                                     size.height,
-                                                     8,
-                                                     0,
-                                                     colorSpace,
-                                                     kCGImageAlphaNone);
-    CGContextDrawImage(grayContext, imageRect, [image CGImage]);
-    CGImageRef grayImageRef = CGBitmapContextCreateImage(grayContext);
-
-    size_t width = CGImageGetWidth(grayImageRef);
-    size_t height = CGImageGetHeight(grayImageRef);
-    size_t bytesPerRow = (width + 7) / 8;
-    uint8_t *bitmapData = calloc(height, bytesPerRow);
-
-    CGContextRef bwContext = CGBitmapContextCreate(bitmapData,
-                                                   width,
-                                                   height,
-                                                   1,
-                                                   bytesPerRow,
-                                                   NULL,
-                                                   kCGImageAlphaNone);
-    CGContextSetInterpolationQuality(bwContext, kCGInterpolationNone);
-    CGContextDrawImage(bwContext, CGRectMake(0, 0, width, height), grayImageRef);
-
-    CGImageRef bwImageRef = CGBitmapContextCreateImage(bwContext);
-    UIImage *bwImage = [UIImage imageWithCGImage:bwImageRef];
-
-    CGColorSpaceRelease(colorSpace);
-    CGContextRelease(grayContext);
-    CGContextRelease(bwContext);
-    CGImageRelease(grayImageRef);
-    CGImageRelease(bwImageRef);
-    free(bitmapData);
-
-    return bwImage;
 }
 
 
