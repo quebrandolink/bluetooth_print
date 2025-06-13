@@ -1,83 +1,159 @@
-import 'package:json_annotation/json_annotation.dart';
-
-part 'bluetooth_print_model.g.dart';
-
-@JsonSerializable(includeIfNull: false)
+/// Representa um dispositivo Bluetooth detectado ou emparelhado.
 class BluetoothDevice {
-  BluetoothDevice();
-
+  /// Nome do dispositivo (pode ser nulo).
   String? name;
-  String? address;
-  int? type = 0;
-  bool? connected = false;
 
-  factory BluetoothDevice.fromJson(Map<String, dynamic> json) =>
-      _$BluetoothDeviceFromJson(json);
-  Map<String, dynamic> toJson() => _$BluetoothDeviceToJson(this);
+  /// Endereço MAC do dispositivo (único).
+  String? address;
+
+  /// Tipo do dispositivo (ex: clássico, BLE, desconhecido).
+  int? type;
+
+  /// Se o dispositivo está atualmente conectado.
+  bool? connected;
+
+  /// Construtor padrão com valores opcionais.
+  BluetoothDevice({
+    this.name,
+    this.address,
+    this.type = 0,
+    this.connected = false,
+  });
+
+  /// Cria uma instância da classe a partir de um JSON (Map).
+  /// Isso é útil ao receber dados da camada nativa ou de uma API.
+  factory BluetoothDevice.fromJson(Map<String, dynamic> json) {
+    return BluetoothDevice(
+      name: json['name'] as String?,
+      address: json['address'] as String?,
+      type: json['type'] as int? ?? 0,
+      connected: json['connected'] as bool? ?? false,
+    );
+  }
+
+  /// Converte a instância para um Map (JSON).
+  /// Ideal para enviar dados para métodos nativos ou APIs.
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = {};
+    if (name != null) data['name'] = name;
+    if (address != null) data['address'] = address;
+    if (type != null) data['type'] = type;
+    if (connected != null) data['connected'] = connected;
+    return data;
+  }
 }
 
-@JsonSerializable(includeIfNull: false)
+/// Representa uma linha de conteúdo para impressão.
+/// Pode ser texto, imagem, código de barras ou QRCode.
 class LineText {
-  LineText(
-      {this.type, //text,barcode,qrcode,image(base64 string)
-      this.content,
-      this.size = 0,
-      this.align = ALIGN_LEFT,
-      this.weight = 0, //0,1
-      this.width = 0, //0,1
-      this.height = 0, //0,1
-      this.absolutePos = 0,
-      this.relativePos = 0,
-      this.fontZoom = 1,
-      this.underline = 0, //0,1
-      this.linefeed = 0, //0,1
-      this.x = 0,
-      this.y = 0});
-
+  // Tipos suportados de impressão
   static const String TYPE_TEXT = 'text';
   static const String TYPE_BARCODE = 'barcode';
   static const String TYPE_QRCODE = 'qrcode';
   static const String TYPE_IMAGE = 'image';
+
+  // Constantes para alinhamento de texto
   static const int ALIGN_LEFT = 0;
   static const int ALIGN_CENTER = 1;
   static const int ALIGN_RIGHT = 2;
 
-  /// print type ,inculde['text','barcode','qrcode','image']
+  /// Tipo da linha (text, barcode, qrcode, image)
   final String? type;
 
-  /// ['text','barcode','qrcode','image'] need print content
+  /// Conteúdo a ser impresso (texto ou base64 da imagem)
   final String? content;
 
-  /// ['qrcode'] qrcode size ,only when type is qrcode
+  /// Tamanho do QR Code
   final int? size;
 
-  /// ['text'] text align
+  /// Alinhamento do texto (0=esquerda, 1=centro, 2=direita)
   final int? align;
 
-  /// ['text'] double
+  /// Negrito (0=normal, 1=negrito)
   final int? weight;
+
+  /// Largura do texto (0=normal, 1=dobrado)
   final int? width;
+
+  /// Altura do texto (0=normal, 1=dobrado)
   final int? height;
 
-  /// ['text'] absolute position from line begin
+  /// Posição absoluta do conteúdo na linha
   final int? absolutePos;
 
-  /// ['text'] relative position from last content
+  /// Posição relativa ao conteúdo anterior
   final int? relativePos;
 
-  /// ['text'] font zoom level, include 1-8
+  /// Nível de zoom da fonte (1 a 8)
   final int? fontZoom;
 
-  /// ['text'] show underline
+  /// Sublinhado (0=não, 1=sim)
   final int? underline;
 
-  /// ['text'] print linebreak
+  /// Quebra de linha após a impressão (0=não, 1=sim)
   final int? linefeed;
 
+  /// Coordenada X para impressão gráfica (imagem ou QRCode)
   final int? x;
+
+  /// Coordenada Y para impressão gráfica
   final int? y;
 
-  factory LineText.fromJson(Map<String, dynamic> json) =>
-      _$LineTextFromJson(json);
-  Map<String, dynamic> toJson() => _$LineTextToJson(this);
+  /// Construtor com valores padrão para facilitar o uso.
+  LineText({
+    this.type,
+    this.content,
+    this.size = 0,
+    this.align = ALIGN_LEFT,
+    this.weight = 0,
+    this.width = 0,
+    this.height = 0,
+    this.absolutePos = 0,
+    this.relativePos = 0,
+    this.fontZoom = 1,
+    this.underline = 0,
+    this.linefeed = 0,
+    this.x = 0,
+    this.y = 0,
+  });
+
+  /// Cria uma instância a partir de um mapa JSON.
+  factory LineText.fromJson(Map<String, dynamic> json) {
+    return LineText(
+      type: json['type'] as String?,
+      content: json['content'] as String?,
+      size: json['size'] as int?,
+      align: json['align'] as int?,
+      weight: json['weight'] as int?,
+      width: json['width'] as int?,
+      height: json['height'] as int?,
+      absolutePos: json['absolutePos'] as int?,
+      relativePos: json['relativePos'] as int?,
+      fontZoom: json['fontZoom'] as int?,
+      underline: json['underline'] as int?,
+      linefeed: json['linefeed'] as int?,
+      x: json['x'] as int?,
+      y: json['y'] as int?,
+    );
+  }
+
+  /// Converte esta instância para JSON.
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = {};
+    if (type != null) data['type'] = type;
+    if (content != null) data['content'] = content;
+    if (size != null) data['size'] = size;
+    if (align != null) data['align'] = align;
+    if (weight != null) data['weight'] = weight;
+    if (width != null) data['width'] = width;
+    if (height != null) data['height'] = height;
+    if (absolutePos != null) data['absolutePos'] = absolutePos;
+    if (relativePos != null) data['relativePos'] = relativePos;
+    if (fontZoom != null) data['fontZoom'] = fontZoom;
+    if (underline != null) data['underline'] = underline;
+    if (linefeed != null) data['linefeed'] = linefeed;
+    if (x != null) data['x'] = x;
+    if (y != null) data['y'] = y;
+    return data;
+  }
 }
