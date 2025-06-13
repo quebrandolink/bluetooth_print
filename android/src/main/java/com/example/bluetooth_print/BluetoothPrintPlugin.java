@@ -69,7 +69,7 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
           Manifest.permission.BLUETOOTH_SCAN,
           Manifest.permission.ACCESS_FINE_LOCATION
   };
-
+/*
   public static void registerWith(Registrar registrar) {
     final BluetoothPrintPlugin instance = new BluetoothPrintPlugin();
 
@@ -80,6 +80,7 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
     }
     instance.setup(registrar.messenger(), application, activity, registrar, null);
   }
+  */
 
   public BluetoothPrintPlugin(){
   }
@@ -138,13 +139,10 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
       stateChannel.setStreamHandler(stateHandler);
       mBluetoothManager = (BluetoothManager) application.getSystemService(Context.BLUETOOTH_SERVICE);
       mBluetoothAdapter = mBluetoothManager.getAdapter();
-      if (registrar != null) {
-        // V1 embedding setup for activity listeners.
-        registrar.addRequestPermissionsResultListener(this);
-      } else {
+      
         // V2 embedding setup for activity listeners.
         activityBinding.addRequestPermissionsResultListener(this);
-      }
+      
     }
   }
 
