@@ -401,40 +401,9 @@ public class DeviceConnFactoryManager {
     }
 
     @SuppressLint("HandlerLeak")
-    private final Handler mHandler = new SafeHandler(this);
-
-    /**
-     * Envia broadcast com o status
-     */
-    private void sendStateBroadcast(int state) {
-        Intent intent = new Intent(ACTION_CONN_STATE);
-        intent.putExtra(STATE, state);
-        intent.putExtra(DEVICE_ID, macAddress);
-        if (mContext != null) {
-            mContext.sendBroadcast(intent);
-        }
-    }
-
-    /**
-     * Determina se a resposta é status em tempo real ou consulta geral
-     */
-    private int judgeResponseType(byte r) {
-        return (byte) ((r & FLAG) >> 4);
-    }
-}
-
-private static class SafeHandler extends Handler {
-    private final WeakReference<DeviceConnFactoryManager> managerRef;
-
-    SafeHandler(DeviceConnFactoryManager manager) {
-        super(Looper.getMainLooper());
-        this.managerRef = new WeakReference<>(manager);
-    }
-
-    @Override
-    public void handleMessage(Message msg) {
-        DeviceConnFactoryManager manager = managerRef.get();
-        if (manager != null) {
+    private final Handler mHandler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
             switch (msg.what) {
                 case Constant.abnormal_Disconnection: // Desconexão anormal
                     Log.d(TAG, "******************* Desconexão anormal");
@@ -528,5 +497,24 @@ private static class SafeHandler extends Handler {
                     break;
             }
         }
+    };
+
+    /**
+     * Envia broadcast com o status
+     */
+    private void sendStateBroadcast(int state) {
+        Intent intent = new Intent(ACTION_CONN_STATE);
+        intent.putExtra(STATE, state);
+        intent.putExtra(DEVICE_ID, macAddress);
+        if (mContext != null) {
+            mContext.sendBroadcast(intent);
+        }
+    }
+
+    /**
+     * Determina se a resposta é status em tempo real ou consulta geral
+     */
+    private int judgeResponseType(byte r) {
+        return (byte) ((r & FLAG) >> 4);
     }
 }
