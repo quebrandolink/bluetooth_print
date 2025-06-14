@@ -13,15 +13,15 @@ public class Constant {
     public static final int CONN_STATE_DISCONN = 0x007;
     public static final int MESSAGE_UPDATE_PARAMETER = 0x009;
     public static final int tip=0x010;
-    public static final int abnormal_Disconnection=0x011;//异常断开
+    public static final int abnormal_Disconnection=0x011;//Desconexão anormal
 
     /**
-     * wifi 默认ip
+     * IP padrão do Wi-Fi
      */
     public static final String WIFI_DEFAULT_IP = "192.168.123.100";
 
     /**
-     * wifi 默认端口号
+     * Porta padrão do Wi-Fi
      */
     public static final int WIFI_DEFAULT_PORT = 9100;
 }

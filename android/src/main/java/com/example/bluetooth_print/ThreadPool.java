@@ -12,32 +12,32 @@ public class ThreadPool {
 
     private static ThreadPool threadPool;
     /**
-     * java线程池
+     * Conjunto de threads Java
      */
     private ThreadPoolExecutor threadPoolExecutor;
 
     /**
-     * 系统最大可用线程
+     * Número máximo de threads disponíveis no sistema
      */
     private final static int CPU_AVAILABLE = Runtime.getRuntime().availableProcessors();
 
     /**
-     * 最大线程数
+     * Número máximo de threads
      */
     private final static int MAX_POOL_COUNTS = CPU_AVAILABLE * 2 + 1;
 
     /**
-     * 线程存活时间
+     * Tempo de vida da thread
      */
     private final static long AVAILABLE = 1L;
 
     /**
-     * 核心线程数
+     * Número de threads
      */
     private final static int CORE_POOL_SIZE = CPU_AVAILABLE + 1;
 
     /**
-     * 线程池缓存队列
+     * Fila de threads
      */
     private BlockingQueue<Runnable> mWorkQueue = new ArrayBlockingQueue<>(CORE_POOL_SIZE);
 
@@ -56,20 +56,20 @@ public class ThreadPool {
         return threadPool;
     }
 
-    public void addParallelTask(Runnable runnable) { //并行线程
+    public void addParallelTask(Runnable runnable) { //Fios paralelos
         if (runnable == null) {
-            throw new NullPointerException("addTask(Runnable runnable)传入参数为空");
+            throw new NullPointerException("addTask(Runnable runnable) passed in parameter is empty");
         }
         if (threadPoolExecutor.getActiveCount()<MAX_POOL_COUNTS) {
-            Log.i("Lee","目前有"+threadPoolExecutor.getActiveCount()+"个线程正在进行中,有"+mWorkQueue.size()+"个任务正在排队");
+            Log.i("Lee","Currently there are"+threadPoolExecutor.getActiveCount()+" threads running, there are"+mWorkQueue.size()+" tasks waiting in queue");
           synchronized (this){
               threadPoolExecutor.execute(runnable);
           }
         }
     }
-    public synchronized void addSerialTask(final Runnable r) { //串行线程
+    public synchronized void addSerialTask(final Runnable r) { //Fios em série
         if (r == null) {
-            throw new NullPointerException("addTask(Runnable runnable)传入参数为空");
+            throw new NullPointerException("addTask(Runnable runnable) passed in parameter is empty");
         }
         mArrayDeque.offer(new Runnable() {
             @Override
@@ -81,7 +81,7 @@ public class ThreadPool {
                 }
             }
         });
-        // 第一次入队列时mActivie为空，因此需要手动调用scheduleNext方法
+        // Ao entrar na fila pela primeira vez, o mActivie está vazio, então você precisa chamar o método scheduleNext manualmente.
         if (mActive == null) {
             scheduleNext();
         }

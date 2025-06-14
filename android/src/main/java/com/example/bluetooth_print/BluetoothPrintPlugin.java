@@ -76,6 +76,7 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
 
   @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
+        this.pluginBinding = flutterPluginBinding; // Armazena a referência
         context = flutterPluginBinding.getApplicationContext();
         channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "bluetooth_print");
         channel.setMethodCallHandler(this);
@@ -91,11 +92,13 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
   @Override
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
     activityBinding = binding;
-    setup(
-            pluginBinding.getBinaryMessenger(),
-            (Application) pluginBinding.getApplicationContext(),
-            activityBinding.getActivity(),
-            activityBinding);
+    if (pluginBinding != null) { // Verifica se não é nulo
+      setup(
+              pluginBinding.getBinaryMessenger(),
+              (Application) pluginBinding.getApplicationContext(),
+              activityBinding.getActivity(),
+              activityBinding);
+    }
   }
 
   @Override

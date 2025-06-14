@@ -19,13 +19,13 @@ public class PrintContent {
       private static final String TAG = PrintContent.class.getSimpleName();
 
       /**
-       * 票据打印对象转换
+       * Ticket print object conversion
        */
       public static Vector<Byte> mapToReceipt(Map<String,Object> config, List<Map<String,Object>> list) {
             EscCommand esc = new EscCommand();
-            //初始化打印机
+            //Initialize printer
             esc.addInitializePrinter();
-            //打印走纸多少个单位
+            //Print paper for a number of units
             esc.addPrintAndFeedLines((byte) 1);
 
             // {type:'text|barcode|qrcode|image', content:'', size:4, align: 0|1|2, weight: 0|1, width:0|1, height:0|1, underline:0|1, linefeed: 0|1}
@@ -45,7 +45,7 @@ public class PrintContent {
                   EscCommand.ENABLE doubleheight = height==0?EscCommand.ENABLE.OFF:EscCommand.ENABLE.ON;
                   EscCommand.ENABLE isUnderline = underline==0?EscCommand.ENABLE.OFF:EscCommand.ENABLE.ON;
 
-                  // 设置打印位置
+                  // Set print position
                   esc.addSelectJustification(align==0?EscCommand.JUSTIFICATION.LEFT:(align==1?EscCommand.JUSTIFICATION.CENTER:EscCommand.JUSTIFICATION.RIGHT));
 
                   if("text".equals(type)){
@@ -56,11 +56,11 @@ public class PrintContent {
                         short rPos = (short)relativePos;
                         Log.e(TAG,"******************* absolutePos: " + aPos +", relativePos: " + rPos +", fontZoom: " + fontZoom);
 
-                        // 设置绝对打印位置，将当前打印位置设置到距离行首 n* hor_motion_unit 点
+                        // Set absolute print position, set the current print position to n* hor_motion_unit points from the beginning of the line
                         esc.addSetAbsolutePrintPosition(aPos);
-                        // 设置相对打印位置，将打印位置设置到距当前位置 n 点处
+                        // Set relative print position, set the print position to n points from the current position
                         esc.addSetRelativePrintPositon(rPos);
-                        // 设置为倍高倍宽
+                        // Set to double height and width
                         esc.addSelectPrintModes(EscCommand.FONT.FONTA, emphasized, doubleheight, doublewidth, isUnderline);
                         if(fontZoom>1){
                               esc.addSetKanjiFontMode(EscCommand.ENABLE.ON, EscCommand.ENABLE.ON, EscCommand.ENABLE.OFF);
@@ -68,25 +68,25 @@ public class PrintContent {
                               esc.addSetKanjiFontMode(EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF);
                         }
                         esc.addText(content);
-                        // 取消倍高倍宽
+                        // Cancel double height and width
                         esc.addSelectPrintModes(EscCommand.FONT.FONTA, EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF);
                   }else if("barcode".equals(type)){
                         esc.addSelectPrintingPositionForHRICharacters(EscCommand.HRI_POSITION.BELOW);
-                        // 设置条码可识别字符位置在条码下方
-                        // 设置条码高度为60点
+                        // Set the readable character position of the barcode to below the barcode
+                        // Set the barcode height to 60 points
                         esc.addSetBarcodeHeight((byte) 60);
-                        // 设置条码宽窄比为2
+                        // Set the barcode width to 2
                         esc.addSetBarcodeWidth((byte) 2);
-                        // 打印Code128码
+                        // Print Code128 barcode
                         esc.addCODE128(esc.genCodeB(content));
                   }else if("qrcode".equals(type)){
-                        // 设置纠错等级
+                        // Set the error correction level
                         esc.addSelectErrorCorrectionLevelForQRCode((byte) 0x31);
-                        // 设置qrcode模块大小
+                        // Set the qrcode module size
                         esc.addSelectSizeOfModuleForQRCode((byte) size);
-                        // 设置qrcode内容
+                        // Set the qrcode content
                         esc.addStoreQRCodeData(content);
-                        // 打印QRCode
+                        // Print QRCode
                         esc.addPrintQRCode();
                   }else if("image".equals(type)){
                         byte[] bytes = Base64.decode(content, Base64.DEFAULT);
@@ -102,52 +102,52 @@ public class PrintContent {
                   }
 
                   if(linefeed == 1){
-                        //打印并换行
+                        //Print and feed
                         esc.addPrintAndLineFeed();
                   }
 
             }
 
-            //打印走纸n个单位
+            //Print and feed n units
             esc.addPrintAndFeedLines((byte) 1);
 
-            // 开钱箱
+            // Open cash drawer
             // esc.addGeneratePlus(LabelCommand.FOOT.F2, (byte) 255, (byte) 255);
-            //开启切刀
+            //Cut paper
             esc.addCutPaper();
-            //添加缓冲区打印完成查询
+            //Add buffer print completion query
             byte [] bytes={0x1D,0x72,0x01};
-            //添加用户指令
+            //Add user command
             esc.addUserCommand(bytes);
 
             return esc.getCommand();
       }
 
       /**
-       * 标签打印对象转换
+       * Label print object conversion
        */
       public static Vector<Byte> mapToLabel(Map<String,Object> config, List<Map<String,Object>> list) {
             LabelCommand tsc = new LabelCommand();
 
-            int width = (int)(config.get("width")==null?60:config.get("width")); // 单位：mm
-            int height = (int)(config.get("height")==null?75:config.get("height")); // 单位：mm
-            int gap = (int)(config.get("gap")==null?0:config.get("gap")); // 单位：mm
+            int width = (int)(config.get("width")==null?60:config.get("width")); // Unit: mm
+            int height = (int)(config.get("height")==null?75:config.get("height")); // Unit: mm
+            int gap = (int)(config.get("gap")==null?0:config.get("gap")); // Unit: mm
 
-            // 设置标签尺寸宽高，按照实际尺寸设置 单位mm
+            // Set the label size width and height, set according to the actual size Unit: mm
             tsc.addSize(width, height);
-            // 设置标签间隙，按照实际尺寸设置，如果为无间隙纸则设置为0 单位mm
+            // Set the label gap, set according to the actual size, if it is a gapless paper, set it to 0 Unit: mm
             tsc.addGap(gap);
-            // 设置打印方向
+            // Set the print direction
             tsc.addDirection(LabelCommand.DIRECTION.FORWARD, LabelCommand.MIRROR.NORMAL);
-            // 开启带Response的打印，用于连续打印
+            // Enable printing with Response, used for continuous printing
             tsc.addQueryPrinterStatus(LabelCommand.RESPONSE_MODE.ON);
-            // 设置原点坐标
+            // Set the origin coordinates
             tsc.addReference(0, 0);
-            //设置浓度
+            // Set the density
             tsc.addDensity(LabelCommand.DENSITY.DNESITY4);
-            // 撕纸模式开启
+            //Tear mode enabled
             tsc.addTear(EscCommand.ENABLE.ON);
-            // 清除打印缓冲区
+            //Clear print buffer
             tsc.addCls();
 
             // {type:'text|barcode|qrcode|image', content:'', x:0,y:0}
@@ -158,11 +158,11 @@ public class PrintContent {
                   int y = (int)(m.get("y")==null?0:m.get("y"));
 
                   if("text".equals(type)){
-                        // 绘制简体中文
+                        // Draw Simplified Chinese
                         tsc.addText(x, y, LabelCommand.FONTTYPE.SIMPLIFIED_CHINESE, LabelCommand.ROTATION.ROTATION_0, LabelCommand.FONTMUL.MUL_1, LabelCommand.FONTMUL.MUL_1, content);
-                        //打印繁体
+                        //Print Traditional Chinese
                         //tsc.addUnicodeText(10,32, LabelCommand.FONTTYPE.TRADITIONAL_CHINESE, LabelCommand.ROTATION.ROTATION_0, LabelCommand.FONTMUL.MUL_1, LabelCommand.FONTMUL.MUL_1,"BIG5碼繁體中文字元","BIG5");
-                        //打印韩文
+                        //Print Korean
                         //tsc.addUnicodeText(10,60, LabelCommand.FONTTYPE.KOREAN, LabelCommand.ROTATION.ROTATION_0, LabelCommand.FONTMUL.MUL_1, LabelCommand.FONTMUL.MUL_1,"Korean 지아보 하성","EUC_KR");
                   }else if("barcode".equals(type)){
                         tsc.add1DBarcode(x, y, LabelCommand.BARCODETYPE.CODE128, 100, LabelCommand.READABEL.EANBEL, LabelCommand.ROTATION.ROTATION_0, content);
@@ -175,18 +175,18 @@ public class PrintContent {
                   }
             }
 
-            // 打印标签
+            // Print label
             tsc.addPrint(1, 1);
-            // 打印标签后 蜂鸣器响
+            // Print label after the buzzer sounds
             tsc.addSound(2, 100);
-            //开启钱箱
+            //Open cash drawer
             tsc.addCashdrwer(LabelCommand.FOOT.F5, 255, 255);
-            // 发送数据
+            // Send data
             return  tsc.getCommand();
       }
 
       /**
-       * 面单打印对象转换
+       * Waybill print object conversion
        */
       public static Vector<Byte> mapToCPCL(Map<String,Object> config, List<Map<String,Object>> list) {
             CpclCommand cpcl = new CpclCommand();

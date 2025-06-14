@@ -2,15 +2,15 @@ package com.example.bluetooth_print;
 
 public enum PrinterCommand {
     /**
-     * ESC指令
+     * Comando ESC
      */
     ESC,
     /**
-     * TSC指令
+     * Comando TSC
      */
     TSC,
     /**
-     * CPCL指令
+     * Comando CPCL
      */
     CPCL
 }
