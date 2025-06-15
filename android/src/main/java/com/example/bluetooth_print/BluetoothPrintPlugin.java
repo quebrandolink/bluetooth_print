@@ -24,6 +24,7 @@ import com.gprinter.command.FactoryCommand;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
+import io.flutter.embedding.engine.plugins.activity.ActivityResultListener;
 import io.flutter.plugin.common.*;
 import io.flutter.plugin.common.EventChannel.EventSink;
 import io.flutter.plugin.common.EventChannel.StreamHandler;
@@ -40,7 +41,8 @@ import java.util.Map;
  * BluetoothPrintPlugin
  * @author thon
  */
-public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, MethodCallHandler, RequestPermissionsResultListener {
+public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, MethodCallHandler, RequestPermissionsResultListener,
+    ActivityResultListener {
   private static final String TAG = "BluetoothPrintPlugin";
   private Object initializationLock = new Object();
   private Context context;
@@ -61,6 +63,7 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
   private MethodCall pendingCall;
   private Result pendingResult;
   private static final int REQUEST_FINE_LOCATION_PERMISSIONS = 1452;
+  private static final int REQUEST_ENABLE_BT = 1;
 
   private static String[] PERMISSIONS_LOCATION = {
           Manifest.permission.BLUETOOTH,
@@ -92,6 +95,7 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
   @Override
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
     activityBinding = binding;
+    activityBinding.addActivityResultListener(this);
     if (pluginBinding != null) { // Verifica se não é nulo
       setup(
               pluginBinding.getBinaryMessenger(),
@@ -153,6 +157,24 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
     application = null;
   }
 
+  @Override
+  public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
+      if (requestCode == REQUEST_ENABLE_BT) {
+          if (resultCode == Activity.RESULT_OK) {
+              // Bluetooth foi ativado, pode escanear agora
+              if (pendingCall != null && pendingResult != null) {
+                  startScan(pendingCall, pendingResult);
+              }
+          } else {
+              // Usuário recusou ativar o Bluetooth
+              if (pendingResult != null) {
+                  pendingResult.error("bluetooth_disabled", "User denied Bluetooth activation", null);
+              }
+          }
+          return true;
+      }
+      return false;
+  }
 
   @Override
   public void onMethodCall(MethodCall call, Result result) {
@@ -176,6 +198,13 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
         break;
       case "startScan":
       {
+        if (!mBluetoothAdapter.isEnabled()) {
+          // Solicitar ativação do Bluetooth
+          Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+          activity.startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
+          result.success(false);
+          break;
+        }
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
           ActivityCompat.requestPermissions(activityBinding.getActivity(), PERMISSIONS_LOCATION, REQUEST_FINE_LOCATION_PERMISSIONS);
           pendingCall = call;
@@ -297,9 +326,12 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
   };
 
   private void startScan() throws IllegalStateException {
+    if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
+        throw new IllegalStateException("Bluetooth adapter is not available or not enabled");
+    }
     BluetoothLeScanner scanner = mBluetoothAdapter.getBluetoothLeScanner();
     if(scanner == null) {
-      throw new IllegalStateException("getBluetoothLeScanner() is null. Is the Adapter on?");
+      throw new IllegalStateException("Failed to get Bluetooth scanner, adapter may be turned off");
     }
 
     // 0:lowPower 1:balanced 2:lowLatency -1:opportunistic
