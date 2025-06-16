@@ -1,1 +1,8 @@
 rootProject.name = 'bluetooth_print'
+// Adicione isso no settings.gradle
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}

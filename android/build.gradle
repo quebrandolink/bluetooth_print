@@ -4,18 +4,18 @@ version '1.0'
 buildscript {
     repositories {
         google()
-        jcenter()
+        mavenCentral() // Substitui o jcenter() (que está obsoleto)
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:4.1.2'
+        classpath 'com.android.tools.build:gradle:7.2.2' // Versão mais recente
     }
 }
 
 rootProject.allprojects {
     repositories {
         google()
-        jcenter()
+        mavenCentral() // Substitui o jcenter() (que está obsoleto)
     }
 }
 
@@ -29,6 +29,7 @@ android {
 
     defaultConfig {
         minSdkVersion 21
+        targetSdkVersion 33 // Adicionado targetSdkVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
     

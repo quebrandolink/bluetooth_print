@@ -11,6 +11,7 @@ import com.gprinter.command.LabelCommand;
 import java.util.List;
 import java.util.Map;
 import java.util.Vector;
+import java.io.UnsupportedEncodingException;
 
 /**
  * @author thon
@@ -23,6 +24,13 @@ public class PrintContent {
        */
       public static Vector<Byte> mapToReceipt(Map<String,Object> config, List<Map<String,Object>> list) {
             EscCommand esc = new EscCommand();
+            // 2. Configurar codificação para Português (PC860)
+            // Enviar comando ESC t seguido do código 10 (PC860 Portuguese)
+            Vector<Byte> encodingCommand = new Vector<>();
+            encodingCommand.add((byte) 0x1B); // ESC
+            encodingCommand.add((byte) 0x74); // t
+            encodingCommand.add((byte) 0x10); // 10 = PC860 Portuguese
+            esc.getCommand().addAll(encodingCommand);
             //Initialize printer
             esc.addInitializePrinter();
             //Print paper for a number of units
@@ -49,27 +57,38 @@ public class PrintContent {
                   esc.addSelectJustification(align==0?EscCommand.JUSTIFICATION.LEFT:(align==1?EscCommand.JUSTIFICATION.CENTER:EscCommand.JUSTIFICATION.RIGHT));
 
                   if("text".equals(type)){
-                        int absolutePos = (int)(m.get("absolutePos")==null?0:m.get("absolutePos"));
-                        int relativePos = (int)(m.get("relativePos")==null?0:m.get("relativePos"));
-                        int fontZoom = (int)(m.get("fontZoom")==null?1:m.get("fontZoom"));
-                        short aPos = (short)absolutePos;
-                        short rPos = (short)relativePos;
-                        Log.e(TAG,"******************* absolutePos: " + aPos +", relativePos: " + rPos +", fontZoom: " + fontZoom);
+                        try{
+                              // Converter para ISO-8859-1 manualmente
+                              byte[] textBytes = content.getBytes("ISO-8859-1");
+                              String encodedContent = new String(textBytes, "ISO-8859-1");
 
-                        // Set absolute print position, set the current print position to n* hor_motion_unit points from the beginning of the line
-                        esc.addSetAbsolutePrintPosition(aPos);
-                        // Set relative print position, set the print position to n points from the current position
-                        esc.addSetRelativePrintPositon(rPos);
-                        // Set to double height and width
-                        esc.addSelectPrintModes(EscCommand.FONT.FONTA, emphasized, doubleheight, doublewidth, isUnderline);
-                        if(fontZoom>1){
-                              esc.addSetKanjiFontMode(EscCommand.ENABLE.ON, EscCommand.ENABLE.ON, EscCommand.ENABLE.OFF);
-                        }else{
-                              esc.addSetKanjiFontMode(EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF);
+                              int absolutePos = (int)(m.get("absolutePos")==null?0:m.get("absolutePos"));
+                              int relativePos = (int)(m.get("relativePos")==null?0:m.get("relativePos"));
+                              int fontZoom = (int)(m.get("fontZoom")==null?1:m.get("fontZoom"));
+                              short aPos = (short)absolutePos;
+                              short rPos = (short)relativePos;
+                              Log.e(TAG,"******************* absolutePos: " + aPos +", relativePos: " + rPos +", fontZoom: " + fontZoom);
+
+                              // Set absolute print position, set the current print position to n* hor_motion_unit points from the beginning of the line
+                              esc.addSetAbsolutePrintPosition(aPos);
+                              // Set relative print position, set the print position to n points from the current position
+                              esc.addSetRelativePrintPositon(rPos);
+                              // Set to double height and width
+                              esc.addSelectPrintModes(EscCommand.FONT.FONTA, emphasized, doubleheight, doublewidth, isUnderline);
+                              if(fontZoom>1){
+                                    esc.addSetKanjiFontMode(EscCommand.ENABLE.ON, EscCommand.ENABLE.ON, EscCommand.ENABLE.OFF);
+                              }else{
+                                    esc.addSetKanjiFontMode(EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF);
+                              }
+                              esc.addText(content);
+                              // Cancel double height and width
+                              esc.addSelectPrintModes(EscCommand.FONT.FONTA, EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF);
+
+                        } catch (UnsupportedEncodingException e) {
+                              Log.e(TAG, "Erro na codificação: " + e.getMessage());
+                              esc.addText(content); // Fallback
                         }
-                        esc.addText(content);
-                        // Cancel double height and width
-                        esc.addSelectPrintModes(EscCommand.FONT.FONTA, EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF);
+
                   }else if("barcode".equals(type)){
                         esc.addSelectPrintingPositionForHRICharacters(EscCommand.HRI_POSITION.BELOW);
                         // Set the readable character position of the barcode to below the barcode
@@ -158,6 +177,11 @@ public class PrintContent {
                   int y = (int)(m.get("y")==null?0:m.get("y"));
 
                   if("text".equals(type)){
+                        try {
+                            content = new String(content.getBytes("UTF-8"), "ISO-8859-1");
+                        } catch (UnsupportedEncodingException e) {
+                            Log.e(TAG, "Erro na conversão de codificação: " + e.getMessage());
+                        }
                         // Draw Simplified Chinese
                         tsc.addText(x, y, LabelCommand.FONTTYPE.SIMPLIFIED_CHINESE, LabelCommand.ROTATION.ROTATION_0, LabelCommand.FONTMUL.MUL_1, LabelCommand.FONTMUL.MUL_1, content);
                         //Print Traditional Chinese

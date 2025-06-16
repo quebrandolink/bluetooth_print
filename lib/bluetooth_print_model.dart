@@ -12,6 +12,13 @@ class BluetoothDevice {
   /// Se o dispositivo está atualmente conectado.
   bool? connected;
 
+  static const int TYPE_UNKNOWN = 0;
+  static const int TYPE_CLASSIC = 1;
+  static const int TYPE_LE = 2;
+  static const int TYPE_DUAL = 3;
+
+  int get effectiveType => type ?? TYPE_UNKNOWN;
+
   /// Construtor padrão com valores opcionais.
   BluetoothDevice({
     this.name,
@@ -41,6 +48,11 @@ class BluetoothDevice {
     if (connected != null) data['connected'] = connected;
     return data;
   }
+
+  @override
+  String toString() {
+    return 'BluetoothDevice(name: $name, address: $address, type: $type, connected: $connected)';
+  }
 }
 
 /// Representa uma linha de conteúdo para impressão.
@@ -51,6 +63,15 @@ class LineText {
   static const String TYPE_BARCODE = 'barcode';
   static const String TYPE_QRCODE = 'qrcode';
   static const String TYPE_IMAGE = 'image';
+
+  static const Map<String, String> types = {
+    'text': 'Texto',
+    'barcode': 'Código de Barras',
+    'qrcode': 'QR Code',
+    'image': 'Imagem',
+  };
+
+  String get typeName => types[type] ?? 'Desconhecido';
 
   // Constantes para alinhamento de texto
   static const int ALIGN_LEFT = 0;
