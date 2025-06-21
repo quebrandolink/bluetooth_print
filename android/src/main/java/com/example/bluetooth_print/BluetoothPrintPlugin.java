@@ -16,16 +16,19 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.util.Log;
-import android.annotation.SuppressLint;
-import androidx.annotation.NonNull;
+
 import androidx.annotation.RequiresApi;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+
 import com.gprinter.command.FactoryCommand;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
-import io.flutter.plugin.common.PluginRegistry.ActivityResultListener;
 import io.flutter.plugin.common.*;
 import io.flutter.plugin.common.EventChannel.EventSink;
 import io.flutter.plugin.common.EventChannel.StreamHandler;
@@ -37,64 +40,35 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Vector;
-import java.io.UnsupportedEncodingException;
 
 /**
- * Plugin para comunicação com impressoras Bluetooth
- * Funcionalidades: conexão, impressão, escaneamento de dispositivos
+ * BluetoothPrintPlugin
  * 
  * @author thon
  */
-public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, MethodCallHandler,
-        RequestPermissionsResultListener {
-
-    // Tag para logs
+public class BluetoothPrintPlugin
+        implements FlutterPlugin, ActivityAware, MethodCallHandler, RequestPermissionsResultListener {
     private static final String TAG = "BluetoothPrintPlugin";
-
-    private static final int CONNECTED = 1;
-    private static final int DISCONNECTED = 0;
-
-    // Objeto para sincronização
     private Object initializationLock = new Object();
-
-    // Contexto da aplicação
     private Context context;
-
-    // Pool de threads para operações assíncronas
     private ThreadPool threadPool;
-
-    // Endereço MAC do dispositivo conectado
     private String curMacAddress;
 
-    // Namespace para os canais de comunicação
     private static final String NAMESPACE = "bluetooth_print";
-
-    // Canais de comunicação com o Flutter
     private MethodChannel channel;
     private EventChannel stateChannel;
-
-    // Gerenciador e adaptador Bluetooth
     private BluetoothManager mBluetoothManager;
     private BluetoothAdapter mBluetoothAdapter;
-
-    // Bindings para integração com Flutter
     private FlutterPluginBinding pluginBinding;
     private ActivityPluginBinding activityBinding;
-
-    // Contexto da aplicação e atividade
     private Application application;
     private Activity activity;
 
-    // Chamadas pendentes
     private MethodCall pendingCall;
     private Result pendingResult;
-
-    // Códigos de requisição
     private static final int REQUEST_FINE_LOCATION_PERMISSIONS = 1452;
-    private static final int REQUEST_ENABLE_BT = 1;
+    private static final int REQUEST_ENABLE_BT = 1451;
 
-    // Permissões necessárias
     private static String[] PERMISSIONS_LOCATION = {
             Manifest.permission.BLUETOOTH,
             Manifest.permission.BLUETOOTH_ADMIN,
@@ -103,215 +77,119 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
             Manifest.permission.ACCESS_FINE_LOCATION
     };
 
-    /**
-     * Construtor padrão
+    /*
+     * public static void registerWith(Registrar registrar) {
+     * final BluetoothPrintPlugin instance = new BluetoothPrintPlugin();
+     * 
+     * Activity activity = registrar.activity();
+     * Application application = null;
+     * if (registrar.context() != null) {
+     * application = (Application) (registrar.context().getApplicationContext());
+     * }
+     * instance.setup(registrar.messenger(), application, activity, registrar,
+     * null);
+     * }
      */
+
     public BluetoothPrintPlugin() {
     }
 
-    // Métodos do FlutterPlugin
-    // ========================
-
-    /**
-     * Chamado quando o plugin é anexado ao motor Flutter
-     * 
-     * @param flutterPluginBinding Binding do plugin Flutter
-     */
     @Override
-    public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
-        this.pluginBinding = flutterPluginBinding;
-        context = flutterPluginBinding.getApplicationContext();
-
-        // Configura o canal de métodos
-        channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "bluetooth_print");
-        channel.setMethodCallHandler(this);
+    public void onAttachedToEngine(FlutterPluginBinding binding) {
+        pluginBinding = binding;
     }
 
-    /**
-     * Chamado quando o plugin é desanexado do motor Flutter
-     * 
-     * @param binding Binding do plugin Flutter
-     */
     @Override
-    public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+    public void onDetachedFromEngine(FlutterPluginBinding binding) {
         pluginBinding = null;
-        channel.setMethodCallHandler(null);
-        channel = null;
     }
 
-    // Métodos do ActivityAware
-    // =======================
-
-    /**
-     * Chamado quando o plugin é anexado a uma atividade
-     * 
-     * @param binding Binding da atividade
-     */
     @Override
-    public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
+    public void onAttachedToActivity(ActivityPluginBinding binding) {
         activityBinding = binding;
 
-        activityBinding.addActivityResultListener(new ActivityResultListener() {
-            @Override
-            public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
-                return BluetoothPrintPlugin.this.onActivityResult(requestCode, resultCode, data);
+        // Configura o launcher para ativação do Bluetooth
+        activityBinding.addActivityResultListener((requestCode, resultCode, data) -> {
+            if (requestCode == REQUEST_ENABLE_BT) {
+                if (resultCode == Activity.RESULT_OK) {
+                    if (pendingCall != null && pendingResult != null) {
+                        startScan(pendingCall, pendingResult);
+                    }
+                } else {
+                    if (pendingResult != null) {
+                        pendingResult.error("bluetooth_disabled", "Bluetooth activation was denied by user", null);
+                    }
+                }
+                return true;
             }
+            return false;
         });
-
-        if (pluginBinding != null) {
-            setup(
-                    pluginBinding.getBinaryMessenger(),
-                    (Application) pluginBinding.getApplicationContext(),
-                    activityBinding.getActivity(),
-                    activityBinding);
-        }
+        setup(
+                pluginBinding.getBinaryMessenger(),
+                (Application) pluginBinding.getApplicationContext(),
+                activityBinding.getActivity(),
+                activityBinding);
     }
 
-    /**
-     * Chamado quando o plugin é desanexado da atividade
-     */
     @Override
     public void onDetachedFromActivity() {
         tearDown();
     }
 
-    /**
-     * Chamado quando a atividade é destruída para mudanças de configuração
-     */
     @Override
     public void onDetachedFromActivityForConfigChanges() {
         onDetachedFromActivity();
     }
 
-    /**
-     * Chamado quando o plugin é reanexado a uma nova atividade após mudanças de
-     * configuração
-     * 
-     * @param binding Binding da nova atividade
-     */
     @Override
-    public void onReattachedToActivityForConfigChanges(@NonNull ActivityPluginBinding binding) {
+    public void onReattachedToActivityForConfigChanges(ActivityPluginBinding binding) {
         onAttachedToActivity(binding);
     }
 
-    // Métodos de configuração
-    // ======================
-
-    /**
-     * Configura os componentes do plugin
-     * 
-     * @param messenger       Mensageiro binário
-     * @param application     Aplicação
-     * @param activity        Atividade
-     * @param activityBinding Binding da atividade
-     */
     private void setup(
             final BinaryMessenger messenger,
             final Application application,
             final Activity activity,
             final ActivityPluginBinding activityBinding) {
         synchronized (initializationLock) {
-            Log.i(TAG, "Configurando plugin Bluetooth");
+            Log.i(TAG, "setup");
             this.activity = activity;
             this.application = application;
             this.context = application;
-
-            // Configura canais de comunicação
             channel = new MethodChannel(messenger, NAMESPACE + "/methods");
             channel.setMethodCallHandler(this);
-
             stateChannel = new EventChannel(messenger, NAMESPACE + "/state");
             stateChannel.setStreamHandler(stateHandler);
-
-            // Obtém o gerenciador Bluetooth
             mBluetoothManager = (BluetoothManager) application.getSystemService(Context.BLUETOOTH_SERVICE);
             mBluetoothAdapter = mBluetoothManager.getAdapter();
-
-            // Configura listeners
-            if (activityBinding != null) {
-                activityBinding.addRequestPermissionsResultListener(this);
-            }
+            activityBinding.addRequestPermissionsResultListener(this);
         }
     }
 
-    /**
-     * Limpa os recursos do plugin
-     */
     private void tearDown() {
-        Log.i(TAG, "Finalizando plugin Bluetooth");
+        Log.i(TAG, "teardown");
         context = null;
-
-        if (activityBinding != null) {
-            activityBinding.removeRequestPermissionsResultListener(this);
-            activityBinding = null;
-        }
-
-        if (channel != null) {
-            channel.setMethodCallHandler(null);
-            channel = null;
-        }
-
-        if (stateChannel != null) {
-            stateChannel.setStreamHandler(null);
-            stateChannel = null;
-        }
-
+        activityBinding.removeRequestPermissionsResultListener(this);
+        activityBinding = null;
+        channel.setMethodCallHandler(null);
+        channel = null;
+        stateChannel.setStreamHandler(null);
+        stateChannel = null;
         mBluetoothAdapter = null;
         mBluetoothManager = null;
         application = null;
     }
 
-    // Métodos de resultado de atividade
-    // ================================
-
-    /**
-     * Trata resultados de atividades (como ativação do Bluetooth)
-     * 
-     * @param requestCode Código da requisição
-     * @param resultCode  Código do resultado
-     * @param data        Dados retornados
-     * @return Verdadeiro se o resultado foi tratado
-     */
-
-    public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == REQUEST_ENABLE_BT) {
-            if (resultCode == Activity.RESULT_OK) {
-                // Bluetooth foi ativado, pode escanear agora
-                if (pendingCall != null && pendingResult != null) {
-                    startScan(pendingCall, pendingResult);
-                }
-            } else {
-                // Usuário recusou ativar o Bluetooth
-                if (pendingResult != null) {
-                    pendingResult.error("bluetooth_disabled", "Usuário negou ativação do Bluetooth", null);
-                }
-            }
-            return true;
-        }
-        return false;
-    }
-
-    // Métodos principais
-    // =================
-
-    /**
-     * Trata chamadas de método do Flutter
-     * 
-     * @param call   Chamada recebida
-     * @param result Objeto para retornar resultados
-     */
     @Override
     public void onMethodCall(MethodCall call, Result result) {
-        // Verifica se o Bluetooth está disponível
         if (mBluetoothAdapter == null && !"isAvailable".equals(call.method)) {
-            result.error("bluetooth_unavailable", "O dispositivo não possui Bluetooth", null);
+            result.error("bluetooth_unavailable", "the device does not have bluetooth", null);
             return;
         }
 
-        // Processa os diferentes comandos
         switch (call.method) {
             case "state":
-                getBluetoothState(result);
+                state(result);
                 break;
             case "isAvailable":
                 result.success(mBluetoothAdapter != null);
@@ -322,9 +200,19 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
             case "isConnected":
                 result.success(threadPool != null);
                 break;
-            case "startScan":
-                handleStartScan(call, result);
+            case "startScan": {
+                if (ContextCompat.checkSelfPermission(context,
+                        Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(activityBinding.getActivity(), PERMISSIONS_LOCATION,
+                            REQUEST_FINE_LOCATION_PERMISSIONS);
+                    pendingCall = call;
+                    pendingResult = result;
+                    break;
+                }
+
+                startScan(call, result);
                 break;
+            }
             case "stopScan":
                 stopScan();
                 result.success(null);
@@ -346,46 +234,30 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
             case "printTest":
                 printTest(result);
                 break;
-            case "openCashDrawer":
-                openCashDrawer(result);
-                break;
-            case "getCurrentDevice":
-                getCurrentDevice(call, result);
-                break;
             default:
                 result.notImplemented();
                 break;
         }
+
     }
 
-    // Métodos auxiliares
-    // =================
-
-    /**
-     * Obtém os dispositivos Bluetooth pareados
-     * 
-     * @param result Objeto para retornar os dispositivos
-     */
     private void getDevices(Result result) {
         List<Map<String, Object>> devices = new ArrayList<>();
-
         for (BluetoothDevice device : mBluetoothAdapter.getBondedDevices()) {
-            Map<String, Object> deviceInfo = new HashMap<>();
-            deviceInfo.put("address", device.getAddress());
-            deviceInfo.put("name", device.getName());
-            deviceInfo.put("type", device.getType());
-            devices.add(deviceInfo);
+            Map<String, Object> ret = new HashMap<>();
+            ret.put("address", device.getAddress());
+            ret.put("name", device.getName());
+            ret.put("type", device.getType());
+            devices.add(ret);
         }
 
         result.success(devices);
     }
 
     /**
-     * Obtém o estado atual do Bluetooth
-     * 
-     * @param result Objeto para retornar o estado
+     * 获取状态
      */
-    private void getBluetoothState(Result result) {
+    private void state(Result result) {
         try {
             switch (mBluetoothAdapter.getState()) {
                 case BluetoothAdapter.STATE_OFF:
@@ -405,48 +277,23 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
                     break;
             }
         } catch (SecurityException e) {
-            result.error("invalid_argument", "Argumento 'address' não encontrado", null);
+            result.error("invalid_argument", "argument 'address' not found", null);
         }
+
     }
 
-    /**
-     * Trata a inicialização do escaneamento Bluetooth
-     * 
-     * @param call   Chamada recebida
-     * @param result Objeto para retornar resultados
-     */
-    private void handleStartScan(MethodCall call, Result result) {
+    private void startScan(MethodCall call, Result result) {
+        Log.d(TAG, "start scan ");
+
         if (!mBluetoothAdapter.isEnabled()) {
-            // Solicita ativação do Bluetooth
+            pendingCall = call;
+            pendingResult = result;
+
+            // Usa o launcher moderno para solicitar ativação
             Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             activity.startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
-            pendingCall = call;
-            pendingResult = result;
             return;
         }
-
-        if (ContextCompat.checkSelfPermission(context,
-                Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-            // Solicita permissões necessárias
-            ActivityCompat.requestPermissions(activity, PERMISSIONS_LOCATION,
-                    REQUEST_FINE_LOCATION_PERMISSIONS);
-            pendingCall = call;
-            pendingResult = result;
-            return;
-        }
-
-        // Inicia o escaneamento
-        startScan(call, result);
-    }
-
-    /**
-     * Inicia o escaneamento Bluetooth
-     * 
-     * @param call   Chamada recebida
-     * @param result Objeto para retornar resultados
-     */
-    private void startScan(MethodCall call, Result result) {
-        Log.d(TAG, "Iniciando escaneamento Bluetooth");
 
         try {
             startScan();
@@ -456,22 +303,21 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
         }
     }
 
-    /**
-     * Invoca um método na thread UI
-     * 
-     * @param name   Nome do método
-     * @param device Dispositivo Bluetooth
-     */
     private void invokeMethodUIThread(final String name, final BluetoothDevice device) {
-        final Map<String, Object> deviceInfo = new HashMap<>();
-        deviceInfo.put("address", device.getAddress());
-        deviceInfo.put("name", device.getName());
-        deviceInfo.put("type", device.getType());
+        final Map<String, Object> ret = new HashMap<>();
+        ret.put("address", device.getAddress());
+        ret.put("name", device.getName());
+        ret.put("type", device.getType());
 
-        activity.runOnUiThread(() -> channel.invokeMethod(name, deviceInfo));
+        activity.runOnUiThread(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        channel.invokeMethod(name, ret);
+                    }
+                });
     }
 
-    // Callback para escaneamento Bluetooth
     private ScanCallback mScanCallback = new ScanCallback() {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
@@ -482,32 +328,17 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
         }
     };
 
-    /**
-     * Inicia o escaneamento Bluetooth
-     * 
-     * @throws IllegalStateException Se o Bluetooth não estiver disponível
-     */
     private void startScan() throws IllegalStateException {
-        if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
-            throw new IllegalStateException("Adaptador Bluetooth não disponível ou desativado");
-        }
-
         BluetoothLeScanner scanner = mBluetoothAdapter.getBluetoothLeScanner();
         if (scanner == null) {
-            throw new IllegalStateException("Falha ao obter scanner Bluetooth");
+            throw new IllegalStateException("getBluetoothLeScanner() is null. Is the Adapter on?");
         }
 
-        // Configurações de escaneamento (baixa latência)
-        ScanSettings settings = new ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                .build();
-
+        // 0:lowPower 1:balanced 2:lowLatency -1:opportunistic
+        ScanSettings settings = new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build();
         scanner.startScan(null, settings, mScanCallback);
     }
 
-    /**
-     * Para o escaneamento Bluetooth
-     */
     private void stopScan() {
         BluetoothLeScanner scanner = mBluetoothAdapter.getBluetoothLeScanner();
         if (scanner != null) {
@@ -516,136 +347,56 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
     }
 
     /**
-     * Conecta a uma impressora Bluetooth
-     * 
-     * @param call   Chamada recebida
-     * @param result Objeto para retornar resultados
+     * 连接
      */
     private void connect(MethodCall call, Result result) {
         Map<String, Object> args = call.arguments();
-
         if (args != null && args.containsKey("address")) {
             final String address = (String) args.get("address");
             this.curMacAddress = address;
 
-            // Desconecta qualquer conexão existente
             disconnect();
 
-            try {
-                // Cria e configura a conexão
-                new DeviceConnFactoryManager.Build()
-                        .setConnMethod(DeviceConnFactoryManager.CONN_METHOD.BLUETOOTH)
-                        .setMacAddress(address)
-                        .setContext(context)
-                        .build();
+            new DeviceConnFactoryManager.Build()
+                    // 设置连接方式
+                    .setConnMethod(DeviceConnFactoryManager.CONN_METHOD.BLUETOOTH)
+                    // 设置连接的蓝牙mac地址
+                    .setMacAddress(address)
+                    .build();
 
-                // Abre a porta em uma thread separada
-                threadPool = ThreadPool.getInstantiation();
-                threadPool.addSerialTask(() -> {
-                    DeviceConnFactoryManager manager = DeviceConnFactoryManager.getDeviceConnFactoryManagers()
-                            .get(address);
-                    if (manager != null) {
-                        manager.openPort();
-                        // Verify connection
-                        if (manager.getConnState()) {
-                            activity.runOnUiThread(() -> result.success(true));
-                            // Explicitly send connected state
-                            channel.invokeMethod("connectionState", CONNECTED);
-                        } else {
-                            activity.runOnUiThread(
-                                    () -> result.error("connection_failed", "Failed to establish connection", null));
-                            channel.invokeMethod("connectionState", DISCONNECTED);
-                        }
-                    } else {
-                        activity.runOnUiThread(
-                                () -> result.error("connection_error", "Connection manager not created", null));
-                        channel.invokeMethod("connectionState", DISCONNECTED);
-                    }
-                });
-            } catch (Exception e) {
-                result.error("connection_error", "Connection manager not created", null);
-                channel.invokeMethod("connectionState", DISCONNECTED);
-            }
+            // 打开端口
+            threadPool = ThreadPool.getInstantiation();
+            threadPool.addSerialTask(new Runnable() {
+                @Override
+                public void run() {
+                    DeviceConnFactoryManager.getDeviceConnFactoryManagers().get(address).openPort();
+                }
+            });
+
+            result.success(true);
         } else {
-            result.error("invalid_argument", "Argumento 'address' não encontrado", null);
-            channel.invokeMethod("connectionState", DISCONNECTED);
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private void getCurrentDevice(MethodCall call, Result result) {
-        if (curMacAddress == null) {
-            result.success(null);
-            return;
+            result.error("******************* invalid_argument", "argument 'address' not found", null);
         }
 
-        try {
-            BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(curMacAddress);
-            if (device != null) {
-                Map<String, Object> deviceInfo = new HashMap<>();
-                deviceInfo.put("name", device.getName());
-                deviceInfo.put("address", device.getAddress());
-                deviceInfo.put("type", device.getType());
-                deviceInfo.put("connected", true); // Assumindo que está conectado se chegou aqui
-                result.success(deviceInfo);
-            } else {
-                result.success(null);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Erro ao obter dispositivo atual", e);
-            result.success(null);
-        }
     }
 
     /**
-     * Desconecta da impressora atual
-     * 
-     * @return Verdadeiro se desconectado com sucesso
+     * 关闭连接
      */
     private boolean disconnect() {
-        try {
-            if (curMacAddress == null) {
-                Log.w(TAG, "Nenhum dispositivo conectado para desconectar");
-                return true;
-            }
-
-            // 1. Obter o gerenciador de conexão
-            DeviceConnFactoryManager deviceConnFactoryManager = DeviceConnFactoryManager.getDeviceConnFactoryManagers()
-                    .get(curMacAddress);
-
-            // 2. Desconectar se existir
-            if (deviceConnFactoryManager != null) {
-                // Forçar fechamento da porta
-                deviceConnFactoryManager.closePort();
-
-                // Remover do mapa de gerenciadores
-                DeviceConnFactoryManager.getDeviceConnFactoryManagers().remove(curMacAddress);
-            }
-
-            // 3. Limpar referências
-            curMacAddress = null;
-
-            // 4. Parar o thread pool
-            if (threadPool != null) {
-                threadPool.stopThreadPool();
-                threadPool = null;
-            }
-
-            return true;
-        } catch (Exception e) {
-            Log.e(TAG, "Erro ao desconectar: " + e.getMessage());
-            return false;
+        DeviceConnFactoryManager deviceConnFactoryManager = DeviceConnFactoryManager.getDeviceConnFactoryManagers()
+                .get(curMacAddress);
+        if (deviceConnFactoryManager != null && deviceConnFactoryManager.mPort != null) {
+            deviceConnFactoryManager.reader.cancel();
+            deviceConnFactoryManager.closePort();
+            deviceConnFactoryManager.mPort = null;
         }
+
+        return true;
     }
 
-    /**
-     * Destrói todas as conexões e recursos
-     * 
-     * @return Verdadeiro se tudo foi destruído com sucesso
-     */
     private boolean destroy() {
         DeviceConnFactoryManager.closeAllPort();
-
         if (threadPool != null) {
             threadPool.stopThreadPool();
         }
@@ -653,231 +404,126 @@ public class BluetoothPrintPlugin implements FlutterPlugin, ActivityAware, Metho
         return true;
     }
 
-    /**
-     * Imprime um teste na impressora conectada
-     * 
-     * @param result Objeto para retornar resultados
-     */
     private void printTest(Result result) {
         final DeviceConnFactoryManager deviceConnFactoryManager = DeviceConnFactoryManager
                 .getDeviceConnFactoryManagers().get(curMacAddress);
-
         if (deviceConnFactoryManager == null || !deviceConnFactoryManager.getConnState()) {
-            result.error("not_connected", "Impressora não conectada", null);
-            return;
+            result.error("not connect", "state not right", null);
         }
 
         threadPool = ThreadPool.getInstantiation();
-        threadPool.addSerialTask(() -> {
-            PrinterCommand printerCommand = deviceConnFactoryManager.getCurrentPrinterCommand();
+        threadPool.addSerialTask(new Runnable() {
+            @Override
+            public void run() {
+                assert deviceConnFactoryManager != null;
+                PrinterCommand printerCommand = deviceConnFactoryManager.getCurrentPrinterCommand();
 
-            if (printerCommand == PrinterCommand.ESC) {
-                deviceConnFactoryManager.sendByteDataImmediately(
-                        FactoryCommand.printSelfTest(FactoryCommand.printerMode.ESC));
-            } else if (printerCommand == PrinterCommand.TSC) {
-                deviceConnFactoryManager.sendByteDataImmediately(
-                        FactoryCommand.printSelfTest(FactoryCommand.printerMode.TSC));
-            } else if (printerCommand == PrinterCommand.CPCL) {
-                deviceConnFactoryManager.sendByteDataImmediately(
-                        FactoryCommand.printSelfTest(FactoryCommand.printerMode.CPCL));
+                if (printerCommand == PrinterCommand.ESC) {
+                    deviceConnFactoryManager
+                            .sendByteDataImmediately(FactoryCommand.printSelfTest(FactoryCommand.printerMode.ESC));
+                } else if (printerCommand == PrinterCommand.TSC) {
+                    deviceConnFactoryManager
+                            .sendByteDataImmediately(FactoryCommand.printSelfTest(FactoryCommand.printerMode.TSC));
+                } else if (printerCommand == PrinterCommand.CPCL) {
+                    deviceConnFactoryManager
+                            .sendByteDataImmediately(FactoryCommand.printSelfTest(FactoryCommand.printerMode.CPCL));
+                }
             }
         });
+
     }
 
-    /**
-     * Abre a gaveta de dinheiro da impressora
-     * 
-     * @param result Objeto para retornar resultados
-     */
-    private void openCashDrawer(Result result) {
-        final DeviceConnFactoryManager deviceConnFactoryManager = DeviceConnFactoryManager
-                .getDeviceConnFactoryManagers().get(curMacAddress);
-
-        if (deviceConnFactoryManager == null || !deviceConnFactoryManager.getConnState()) {
-            result.error("not_connected", "Impressora não conectada", null);
-            return;
-        }
-
-        threadPool = ThreadPool.getInstantiation();
-        threadPool.addSerialTask(() -> {
-            try {
-                // Comando ESC/POS para abrir gaveta
-                byte[] openDrawerCommand = new byte[] { 0x1B, 0x70, 0x00, (byte) 0xFF, (byte) 0xFF };
-                deviceConnFactoryManager.sendByteDataImmediately(openDrawerCommand);
-                result.success(true);
-            } catch (Exception e) {
-                result.error("open_cash_drawer_error", e.getMessage(), null);
-            }
-        });
-    }
-
-    /**
-     * Envia dados para impressão
-     * 
-     * @param call   Chamada recebida
-     * @param result Objeto para retornar resultados
-     */
     @SuppressWarnings("unchecked")
     private void print(MethodCall call, Result result) {
         Map<String, Object> args = call.arguments();
 
         final DeviceConnFactoryManager deviceConnFactoryManager = DeviceConnFactoryManager
                 .getDeviceConnFactoryManagers().get(curMacAddress);
-
         if (deviceConnFactoryManager == null || !deviceConnFactoryManager.getConnState()) {
-            result.error("not_connected", "Impressora não conectada", null);
-            return;
+            result.error("not connect", "state not right", null);
         }
 
         if (args != null && args.containsKey("config") && args.containsKey("data")) {
             final Map<String, Object> config = (Map<String, Object>) args.get("config");
             final List<Map<String, Object>> list = (List<Map<String, Object>>) args.get("data");
-
             if (list == null) {
-                result.error("invalid_data", "Dados de impressão inválidos", null);
                 return;
             }
 
             threadPool = ThreadPool.getInstantiation();
-            threadPool.addSerialTask(() -> {
-                try {
+            threadPool.addSerialTask(new Runnable() {
+                @Override
+                public void run() {
+                    assert deviceConnFactoryManager != null;
                     PrinterCommand printerCommand = deviceConnFactoryManager.getCurrentPrinterCommand();
-                    Vector<Byte> data;
 
-                    // Configurar codificação ISO-8859-1 para caracteres acentuados
-                    byte[] encodingCommand = new byte[] { 0x1B, 0x74, 0x10 };
-                    deviceConnFactoryManager.sendByteDataImmediately(encodingCommand);
-
-                    // Obter os dados no formato apropriado
                     if (printerCommand == PrinterCommand.ESC) {
-                        data = PrintContent.mapToReceipt(config, list);
+                        deviceConnFactoryManager.sendDataImmediately(PrintContent.mapToReceipt(config, list));
                     } else if (printerCommand == PrinterCommand.TSC) {
-                        data = PrintContent.mapToLabel(config, list);
+                        deviceConnFactoryManager.sendDataImmediately(PrintContent.mapToLabel(config, list));
                     } else if (printerCommand == PrinterCommand.CPCL) {
-                        data = PrintContent.mapToCPCL(config, list);
-                    } else {
-                        throw new Exception("Tipo de comando de impressora não suportado");
+                        deviceConnFactoryManager.sendDataImmediately(PrintContent.mapToCPCL(config, list));
                     }
-
-                    // Enviar os dados para impressão
-                    deviceConnFactoryManager.sendDataImmediately(data);
-                    activity.runOnUiThread(() -> result.success(true));
-
-                } catch (Exception e) {
-                    Log.e(TAG, "Erro na impressão: " + e.getMessage());
-                    activity.runOnUiThread(() -> result.error("print_error", e.getMessage(), null));
                 }
             });
         } else {
-            result.error("invalid_arguments", "Forneça config e data para impressão", null);
+            result.error("please add config or data", "", null);
         }
+
     }
 
-    // Tratamento de permissões
-    // =======================
-
-    /**
-     * Trata o resultado de solicitações de permissão
-     * 
-     * @param requestCode  Código da requisição
-     * @param permissions  Permissões solicitadas
-     * @param grantResults Resultados das permissões
-     * @return Verdadeiro se o resultado foi tratado
-     */
     @Override
     public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+
         if (requestCode == REQUEST_FINE_LOCATION_PERMISSIONS) {
             if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 startScan(pendingCall, pendingResult);
             } else {
-                pendingResult.error("no_permissions",
-                        "Este plugin requer permissões de localização para escanear", null);
+                pendingResult.error("no_permissions", "this plugin requires location permissions for scanning", null);
                 pendingResult = null;
             }
             return true;
         }
         return false;
-    }
 
-    // StreamHandler para estado do Bluetooth
-    // =====================================
+    }
 
     private final StreamHandler stateHandler = new StreamHandler() {
         private EventSink sink;
-        private BroadcastReceiver mReceiver;
+
+        private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                final String action = intent.getAction();
+                Log.d(TAG, "stateStreamHandler, current action: " + action);
+
+                if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
+                    threadPool = null;
+                    sink.success(intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1));
+                } else if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)) {
+                    sink.success(1);
+                } else if (BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(action)) {
+                    threadPool = null;
+                    sink.success(0);
+                }
+            }
+        };
 
         @Override
         public void onListen(Object o, EventSink eventSink) {
             sink = eventSink;
-
-            mReceiver = new BroadcastReceiver() {
-                @Override
-                public void onReceive(Context context, Intent intent) {
-                    final String action = intent.getAction();
-                    Log.d(TAG, "stateStreamHandler, ação atual: " + action);
-
-                    if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
-                        threadPool = null;
-                        int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1);
-                        // Mapeia para os valores que o Dart espera (10, 11, 12, 13)
-                        switch (state) {
-                            case BluetoothAdapter.STATE_OFF:
-                                sink.success(10);
-                                break;
-                            case BluetoothAdapter.STATE_TURNING_ON:
-                                sink.success(11);
-                                break;
-                            case BluetoothAdapter.STATE_ON:
-                                sink.success(12);
-                                break;
-                            case BluetoothAdapter.STATE_TURNING_OFF:
-                                sink.success(13);
-                                break;
-                            default:
-                                sink.success(-1); // unknown
-                        }
-                    } else if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)) {
-                        sink.success(1); // CONNECTED
-                    } else if (BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(action)) {
-                        threadPool = null;
-                        sink.success(0); // DISCONNECTED
-                    }
-                }
-            };
-
             IntentFilter filter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
             filter.addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED);
             filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
             filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
             context.registerReceiver(mReceiver, filter);
-            // Envia o estado inicial
-            if (mBluetoothAdapter != null) {
-                switch (mBluetoothAdapter.getState()) {
-                    case BluetoothAdapter.STATE_OFF:
-                        sink.success(10);
-                        break;
-                    case BluetoothAdapter.STATE_TURNING_ON:
-                        sink.success(11);
-                        break;
-                    case BluetoothAdapter.STATE_ON:
-                        sink.success(12);
-                        break;
-                    case BluetoothAdapter.STATE_TURNING_OFF:
-                        sink.success(13);
-                        break;
-                    default:
-                        sink.success(-1);
-                }
-            }
         }
 
         @Override
         public void onCancel(Object o) {
-            if (mReceiver != null) {
-                context.unregisterReceiver(mReceiver);
-                mReceiver = null;
-            }
             sink = null;
+            context.unregisterReceiver(mReceiver);
         }
     };
+
 }

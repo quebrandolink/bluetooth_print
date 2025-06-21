@@ -24,7 +24,6 @@ class BluetoothDevice {
     this.name,
     this.address,
     this.type = 0,
-    this.connected = false,
   });
 
   /// Cria uma instância da classe a partir de um JSON (Map).
@@ -34,7 +33,6 @@ class BluetoothDevice {
       name: json['name'] as String?,
       address: json['address'] as String?,
       type: json['type'] as int? ?? 0,
-      connected: json['connected'] as bool? ?? false,
     );
   }
 
@@ -45,14 +43,23 @@ class BluetoothDevice {
     if (name != null) data['name'] = name;
     if (address != null) data['address'] = address;
     if (type != null) data['type'] = type;
-    if (connected != null) data['connected'] = connected;
     return data;
   }
 
   @override
   String toString() {
-    return 'BluetoothDevice(name: $name, address: $address, type: $type, connected: $connected)';
+    return 'BluetoothDevice(name: $name, address: $address, type: $type)';
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BluetoothDevice &&
+          runtimeType == other.runtimeType &&
+          address == other.address;
+
+  @override
+  int get hashCode => address.hashCode;
 }
 
 /// Representa uma linha de conteúdo para impressão.

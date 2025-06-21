@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:bluetooth_print/bluetooth_print.dart';
 import 'package:bluetooth_print/bluetooth_print_model.dart';
@@ -26,8 +28,10 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
   final BluetoothPrint bluetoothPrint = BluetoothPrint.instance;
   List<BluetoothDevice> devices = [];
   BluetoothDevice? selectedDevice;
+  bool bluetoothOn = false;
   bool isConnected = false;
   bool isConnecting = false;
+  StreamSubscription<BluetoothPrintStatus>? bluetoothStateSubscription;
 
   @override
   void initState() {
@@ -38,27 +42,40 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
     _listenForConnectionState();
   }
 
-  void _listenForConnectionState() {
-    bluetoothPrint.connectionState.listen((state) {
+  void _listenForConnectionState() async {
+    print(await bluetoothPrint.isOn);
+    print(await bluetoothPrint.isAvailable);
+    print(await bluetoothPrint.isConnected);
+
+    bluetoothStateSubscription = bluetoothPrint.state.listen((state) {
+      print('bluetoothPrint.bluetoothState.listen: $state');
       setState(() {
-        isConnected = state == BluetoothPrint.CONNECTED;
+        bluetoothOn = state != BluetoothPrintStatus.off;
       });
     });
   }
 
+  @override
+  void dispose() {
+    super.dispose();
+    bluetoothStateSubscription?.cancel();
+  }
+
   void scanDevices() async {
-    await bluetoothPrint.disconnect();
-    devices.clear();
-    setState(() {
-      isConnected = false;
-      selectedDevice = null;
-    });
-    bluetoothPrint.startScan(timeout: const Duration(seconds: 4));
-    bluetoothPrint.scanResults.listen((results) {
+    if (bluetoothOn) {
+      await bluetoothPrint.disconnect();
+      devices.clear();
       setState(() {
-        devices = results;
+        isConnected = false;
+        selectedDevice = null;
       });
-    });
+      final listDevices = await bluetoothPrint.startScan(
+        timeout: const Duration(seconds: 4),
+      );
+      setState(() {
+        devices = listDevices;
+      });
+    }
   }
 
   void connectToDevice(BluetoothDevice device) async {
@@ -129,7 +146,7 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
         linefeed: 1,
         weight: 1,
       ),
-      /* LineText(
+      LineText(
         type: LineText.TYPE_QRCODE,
         content: 'QRCODE.COM.BR',
         align: LineText.ALIGN_CENTER,
@@ -150,14 +167,10 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
         content: '\n',
         align: LineText.ALIGN_CENTER,
         linefeed: 1,
-      ), */
+      ),
     ];
 
-    await bluetoothPrint.printReceipt(
-      type: PrinterType.esc,
-      config: config,
-      data: list,
-    );
+    await bluetoothPrint.printReceipt(config: config, data: list);
   }
 
   @override
@@ -167,64 +180,67 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: StreamBuilder(
-            stream: bluetoothPrint.bluetoothState,
-            builder: (context, asyncSnapshot) {
-              if (asyncSnapshot.hasData) {
-                if (asyncSnapshot.data != BluetoothState.off) {
-                  return Column(
-                    children: [
-                      ElevatedButton(
-                        onPressed: scanDevices,
-                        child: const Text('🔍 Escanear Dispositivos'),
+          child: (!bluetoothOn)
+              ? const Center(child: Text('Bluetooth desligado'))
+              : Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: devices.length,
+                        itemBuilder: (_, index) {
+                          final device = devices[index];
+                          return ListTile(
+                            title: Text(device.name ?? 'Sem nome'),
+                            subtitle: Text(device.address ?? ''),
+                            trailing: selectedDevice?.address == device.address
+                                ? const Icon(Icons.check, color: Colors.green)
+                                : null,
+                            onTap: () => connectToDevice(device),
+                          );
+                        },
                       ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: ListView.builder(
-                          itemCount: devices.length,
-                          itemBuilder: (_, index) {
-                            final device = devices[index];
-                            return ListTile(
-                              title: Text(device.name ?? 'Sem nome'),
-                              subtitle: Text(device.address ?? ''),
-                              trailing:
-                                  selectedDevice?.address == device.address
-                                  ? const Icon(Icons.check, color: Colors.green)
-                                  : null,
-                              onTap: () => connectToDevice(device),
-                            );
-                          },
+                    ),
+                    const Divider(),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: isConnected ? printSample : null,
+                            child: const Text('🖨️ Imprimir Teste'),
+                          ),
                         ),
-                      ),
-                      const Divider(),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: !isConnected ? printSample : null,
-                              child: const Text('🖨️ Imprimir Teste'),
-                            ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: isConnected ? disconnect : null,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
                           ),
-                          const SizedBox(width: 12),
-                          ElevatedButton(
-                            onPressed: !isConnected ? disconnect : null,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                            ),
-                            child: const Text('Desconectar'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  );
-                } else if (asyncSnapshot.data == BluetoothState.off) {
-                  return const Center(child: Text('Bluetooth desligado'));
-                }
-              }
-              return const Center(child: CircularProgressIndicator());
-            },
-          ),
+                          child: const Text('Desconectar'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
         ),
+      ),
+      floatingActionButton: StreamBuilder<bool>(
+        stream: bluetoothPrint.isScanning,
+        initialData: false,
+        builder: (c, snapshot) {
+          if (snapshot.data == true) {
+            return FloatingActionButton(
+              onPressed: () => bluetoothPrint.stopScan(),
+              backgroundColor: Colors.red,
+              child: Icon(Icons.stop),
+            );
+          } else {
+            return FloatingActionButton(
+              onPressed: scanDevices,
+              child: Icon(Icons.search),
+            );
+          }
+        },
       ),
     );
   }
