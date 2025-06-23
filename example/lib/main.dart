@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:bluetooth_print/bluetooth_print.dart';
@@ -38,17 +39,15 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
     super.initState();
 
     // Escaneia ao iniciar
-    scanDevices();
     _listenForConnectionState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      scanDevices();
+    });
   }
 
   void _listenForConnectionState() async {
-    print(await bluetoothPrint.isOn);
-    print(await bluetoothPrint.isAvailable);
-    print(await bluetoothPrint.isConnected);
-
     bluetoothStateSubscription = bluetoothPrint.state.listen((state) {
-      print('bluetoothPrint.bluetoothState.listen: $state');
+      log('bluetoothPrint.bluetoothState.listen: $state');
       setState(() {
         bluetoothOn = state != BluetoothPrintStatus.off;
       });
@@ -62,8 +61,11 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
   }
 
   void scanDevices() async {
-    if (bluetoothOn) {
+    log('bluetoothPrint.scanDevices');
+    if (await bluetoothPrint.isConnected == true) {
       await bluetoothPrint.disconnect();
+    }
+    if (await bluetoothPrint.isOn) {
       devices.clear();
       setState(() {
         isConnected = false;
@@ -79,14 +81,13 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
   }
 
   void connectToDevice(BluetoothDevice device) async {
+    log('bluetoothPrint.connectToDevice');
     if (isConnecting) return; // Evita múltiplos cliques
     setState(() {
       isConnecting = true;
     });
     try {
-      print('Conectando a ${device.name}...');
       final connected = await bluetoothPrint.connect(device);
-      print('Resultado da conexão: $connected');
 
       if (connected) {
         setState(() {
@@ -102,7 +103,6 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
         }
       }
     } catch (e) {
-      print('Erro ao conectar: $e');
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -116,6 +116,7 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
   }
 
   void disconnect() async {
+    log('bluetoothPrint.disconnect');
     final status = await bluetoothPrint.disconnect();
     if (status) {
       setState(() {
@@ -126,6 +127,7 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
   }
 
   void printSample() async {
+    log('bluetoothPrint.printSample');
     if (selectedDevice == null || !isConnected) return;
 
     final Map<String, dynamic> config = {};
@@ -182,45 +184,64 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
           padding: const EdgeInsets.all(16.0),
           child: (!bluetoothOn)
               ? const Center(child: Text('Bluetooth desligado'))
-              : Column(
-                  children: [
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: devices.length,
-                        itemBuilder: (_, index) {
-                          final device = devices[index];
-                          return ListTile(
-                            title: Text(device.name ?? 'Sem nome'),
-                            subtitle: Text(device.address ?? ''),
-                            trailing: selectedDevice?.address == device.address
-                                ? const Icon(Icons.check, color: Colors.green)
-                                : null,
-                            onTap: () => connectToDevice(device),
-                          );
-                        },
-                      ),
-                    ),
-                    const Divider(),
-                    Row(
+              : StreamBuilder(
+                  stream: bluetoothPrint.isScanning,
+                  builder: (context, asyncSnapshot) {
+                    if (asyncSnapshot.data == true) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    return Column(
                       children: [
+                        const SizedBox(height: 12),
                         Expanded(
-                          child: ElevatedButton(
-                            onPressed: isConnected ? printSample : null,
-                            child: const Text('🖨️ Imprimir Teste'),
+                          child: ListView.builder(
+                            itemCount: devices.length,
+                            itemBuilder: (_, index) {
+                              final device = devices[index];
+                              return ListTile(
+                                title: Text(device.name ?? 'Sem nome'),
+                                subtitle: Text(device.address ?? ''),
+                                trailing:
+                                    selectedDevice?.address == device.address
+                                    ? const Icon(
+                                        Icons.check,
+                                        color: Colors.green,
+                                      )
+                                    : null,
+                                onTap: () => connectToDevice(device),
+                              );
+                            },
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        ElevatedButton(
-                          onPressed: isConnected ? disconnect : null,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
+                        if (isConnected)
+                          Column(
+                            children: [
+                              const Divider(),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: isConnected
+                                          ? printSample
+                                          : null,
+                                      child: const Text('🖨️ Imprimir Teste'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  ElevatedButton(
+                                    onPressed: isConnected ? disconnect : null,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.red,
+                                    ),
+                                    child: const Text('Desconectar'),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                          child: const Text('Desconectar'),
-                        ),
                       ],
-                    ),
-                  ],
+                    );
+                  },
                 ),
         ),
       ),
