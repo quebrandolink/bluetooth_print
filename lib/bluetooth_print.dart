@@ -1,269 +1,166 @@
+// === bluetooth_print.dart ===
+
 import 'dart:async';
 import 'package:flutter/services.dart';
 
+import 'bluetooth_connection.dart';
+import 'bluetooth_scanner.dart';
+import 'bluetooth_printer.dart';
+import 'bluetooth_state.dart';
 import 'bluetooth_print_model.dart';
+import 'bluetooth_print_exception.dart';
 
-/// Classe responsável por controlar a comunicação Bluetooth com impressoras.
-/// Permite verificar o estado do Bluetooth, iniciar e parar escaneamento de dispositivos,
-/// conectar e desconectar dispositivos, além de imprimir recibos ou etiquetas.
+/// Classe unificada que encapsula todas as funcionalidades Bluetooth
+/// usando as implementações baseadas nos princípios SOLID.
 class BluetoothPrint {
-  /// Nome do canal usado para comunicação com a parte nativa (Android/iOS).
   static const String NAMESPACE = 'bluetooth_print';
+  static const MethodChannel _channel = MethodChannel('$NAMESPACE/methods');
 
-  /// Constantes que representam o estado da conexão.
-  static const int CONNECTED = 1;
-  static const int DISCONNECTED = 0;
+  static final BluetoothPrint _instance = BluetoothPrint._internal();
 
-  /// Canal usado para enviar comandos (métodos) para a plataforma nativa.
-  static const MethodChannel _channel =
-      const MethodChannel('$NAMESPACE/methods');
+  factory BluetoothPrint() => _instance;
 
-  /// Canal usado para receber atualizações de status do Bluetooth da plataforma nativa.
-  static const EventChannel _stateChannel =
-      const EventChannel('$NAMESPACE/state');
+  late final IBluetoothScanner _scanner;
+  late final IBluetoothConnection _connection;
+  late final IBluetoothPrinter _printer;
+  late final IBluetoothState _state;
 
-  /// Controlador interno para escutar chamadas da plataforma.
-  final StreamController<MethodCall> _methodStreamController =
-      StreamController.broadcast();
+  BluetoothPrint._internal() {
+    final _methodStreamController = StreamController<MethodCall>.broadcast();
 
-  /// Stream que emite eventos recebidos do canal nativo (ex: dispositivos encontrados).
-  Stream<MethodCall> get _methodStream => _methodStreamController.stream;
-
-  /// Construtor privado para configurar o listener do canal.
-  BluetoothPrint._() {
-    _channel.setMethodCallHandler((MethodCall call) async {
-      _methodStreamController.add(call);
-    });
-  }
-
-  /// Instância única (singleton) da classe.
-  static final BluetoothPrint _instance = BluetoothPrint._();
-
-  /// Acesso à instância única.
-  static BluetoothPrint get instance => _instance;
-
-  /// Verifica se o dispositivo possui Bluetooth disponível.
-  Future<bool> get isAvailable async =>
-      await _channel.invokeMethod('isAvailable').then<bool>((d) => d);
-
-  /// Verifica se o Bluetooth está ligado.
-  Future<bool> get isOn async =>
-      await _channel.invokeMethod('isOn').then<bool>((d) => d);
-
-  /// Verifica se há um dispositivo atualmente conectado.
-  Future<bool?> get isConnected async =>
-      await _channel.invokeMethod('isConnected');
-
-  /// Controlador e stream que indicam se está ocorrendo um escaneamento de dispositivos.
-  final StreamController<bool> _isScanningController =
-      StreamController<bool>.broadcast();
-  bool _isScanningValue = false;
-  Stream<bool> get isScanning => _isScanningController.stream;
-
-  /// Controlador e stream que contém a lista de dispositivos encontrados durante o escaneamento.
-  final StreamController<List<BluetoothDevice>> _scanResultsController =
-      StreamController<List<BluetoothDevice>>.broadcast();
-  List<BluetoothDevice> _scanResultsValue = [];
-  Stream<List<BluetoothDevice>> get scanResults =>
-      _scanResultsController.stream;
-
-  /// Controlador usado internamente para sinalizar a parada do escaneamento.
-  final StreamController<void> _stopScanController =
-      StreamController<void>.broadcast();
-
-  /// Retorna o estado atual do Bluetooth e atualizações futuras (ligado, desligado, etc.).
-  Stream<BluetoothPrintStatus> get state async* {
-    final int stateCode = await _channel.invokeMethod('state');
-    yield _getBluetoothStatus(stateCode);
-
-    yield* _stateChannel
-        .receiveBroadcastStream()
-        .map((s) => _getBluetoothStatus(s as int));
-  }
-
-  /// Converte o código numérico recebido da plataforma para um estado legível.
-  BluetoothPrintStatus _getBluetoothStatus(int state) {
-    switch (state) {
-      case 10:
-        return BluetoothPrintStatus.off;
-      case 11:
-        return BluetoothPrintStatus.turningOn;
-      case 12:
-        return BluetoothPrintStatus.on;
-      case 13:
-        return BluetoothPrintStatus.turningOff;
-      case 1:
-        return BluetoothPrintStatus.connected;
-      case 0:
-        return BluetoothPrintStatus.disconnected;
-      default:
-        return BluetoothPrintStatus.unknown;
-    }
-  }
-
-  /// Inicia um escaneamento em busca de dispositivos Bluetooth por um tempo limitado.
-  /// Retorna uma lista dos dispositivos encontrados em tempo real.
-  Stream<BluetoothDevice> scan(
-      {Duration timeout = const Duration(seconds: 5)}) {
-    final scanStreamController = StreamController<BluetoothDevice>();
-
-    if (_isScanningValue) {
-      scanStreamController
-          .addError(Exception('Outro escaneamento já está em andamento.'));
-      return scanStreamController.stream;
-    }
-
-    _isScanningValue = true;
-    _isScanningController.add(_isScanningValue);
-    _scanResultsValue = [];
-    _scanResultsController.add(_scanResultsValue);
-
-    final subscription = _methodStream
-        .where((m) => m.method == "ScanResult")
-        .map((m) => Map<String, dynamic>.from(m.arguments as Map))
-        .listen((map) {
-      final device = BluetoothDevice.fromJson(map);
-
-      // Normaliza o endereço do dispositivo para evitar duplicatas
-      final normalizedAddress = device.address?.toUpperCase().trim();
-      if (normalizedAddress == null || normalizedAddress.isEmpty) return;
-
-      final index = _scanResultsValue.indexWhere(
-          (e) => e.address?.toUpperCase().trim() == normalizedAddress);
-
-      if (index == -1) {
-        // Dispositivo novo - adicionar à lista
-        _scanResultsValue.add(device);
-        _scanResultsController.add(List.from(_scanResultsValue));
-        scanStreamController.add(device);
-      } else {
-        // Dispositivo já existe - atualizar caso necessário
-        final existingDevice = _scanResultsValue[index];
-        if (existingDevice.name != device.name ||
-            existingDevice.type != device.type) {
-          _scanResultsValue[index] = device;
-          _scanResultsController.add(List.from(_scanResultsValue));
-        }
+    _channel.setMethodCallHandler((call) async {
+      if (!_methodStreamController.isClosed) {
+        _methodStreamController.add(call);
       }
     });
 
-    // Inicia o escaneamento nativo
-    _channel.invokeMethod('startScan').catchError((e) {
-      print('Erro ao iniciar o escaneamento: $e');
-      _stopScan();
-      scanStreamController.addError(e);
-    });
-
-    Timer? timeoutTimer;
-    timeoutTimer = Timer(timeout, () {
-      _stopScan();
-      scanStreamController.close();
-    });
-
-    // Finaliza quando o controle interno sinaliza parada
-    _stopScanController.stream.first.then((_) {
-      timeoutTimer?.cancel();
-      scanStreamController.close();
-    });
-
-    // Limpeza caso o stream seja cancelado
-    scanStreamController.onCancel = () {
-      _stopScan();
-      subscription.cancel();
-      timeoutTimer?.cancel();
-    };
-
-    return scanStreamController.stream;
+    _scanner = MethodChannelBluetoothScanner();
+    _connection = MethodChannelBluetoothConnection();
+    _printer = MethodChannelBluetoothPrinter();
+    _state = MethodChannelBluetoothState();
   }
 
-  /// Inicia um escaneamento e retorna uma lista completa dos dispositivos encontrados após o tempo limite.
+  // === ESCANEAMENTO ===
+
+  /// Inicia escaneamento de dispositivos bluetooth
+  Stream<BluetoothDevice> scan(
+      {Duration timeout = const Duration(seconds: 5)}) {
+    try {
+      return _scanner.scan(timeout: timeout);
+    } catch (e) {
+      throw BluetoothPrintException(
+          'scan_error', 'Erro ao iniciar escaneamento: $e');
+    }
+  }
+
+  /// Retorna todos os dispositivos encontrados após escaneamento
   Future<List<BluetoothDevice>> startScan(
       {Duration timeout = const Duration(seconds: 5)}) async {
-    final devices = <BluetoothDevice>[];
-    await scan(timeout: timeout).forEach(devices.add);
-    return devices;
-  }
-
-  /// Encerra o escaneamento atual.
-  Future<void> stopScan() async {
-    await _channel.invokeMethod('stopScan');
-    _stopScan();
-  }
-
-  /// Função auxiliar para sinalizar o fim do escaneamento.
-  void _stopScan() {
-    if (_isScanningValue) {
-      _isScanningValue = false;
-      _isScanningController.add(_isScanningValue);
-      _stopScanController.add(null);
+    try {
+      return await _scanner.startScan(timeout: timeout);
+    } catch (e) {
+      throw BluetoothPrintException(
+          'start_scan_error', 'Erro ao iniciar escaneamento: $e');
     }
   }
 
-  /// Conecta-se a um dispositivo Bluetooth selecionado.
+  /// Para o escaneamento de dispositivos
+  Future<void> stopScan() async {
+    try {
+      await _scanner.stopScan();
+    } catch (e) {
+      throw BluetoothPrintException(
+          'stop_scan_error', 'Erro ao parar escaneamento: $e');
+    }
+  }
+
+  /// Stream do estado de escaneamento
+  Stream<bool> get isScanning => _scanner.isScanning;
+
+  /// Stream da lista de dispositivos encontrados
+  Stream<List<BluetoothDevice>> get scanResults => _scanner.scanResults;
+
+  // === CONEXÃO ===
+
+  /// Conecta a um dispositivo bluetooth
   Future<bool> connect(BluetoothDevice device) async {
     try {
-      final connected = await _channel.invokeMethod('connect', device.toJson());
-      return connected == true;
+      return await _connection.connect(device);
     } catch (e) {
-      print('Erro ao conectar: $e');
-      return false;
+      throw BluetoothPrintException('connect_error', 'Erro ao conectar: $e');
     }
   }
 
-  /// Desconecta o dispositivo atualmente conectado.
-  Future<bool> disconnect() {
-    return _channel.invokeMethod('disconnect').then((_) => true);
+  /// Desconecta o dispositivo atual
+  Future<bool> disconnect() async {
+    try {
+      return await _connection.disconnect();
+    } catch (e) {
+      throw BluetoothPrintException(
+          'disconnect_error', 'Erro ao desconectar: $e');
+    }
   }
 
-  /// Libera recursos internos usados pelo plugin Bluetooth.
-  Future<bool> destroy() => _channel.invokeMethod('destroy').then((_) => true);
+  /// Verifica se há dispositivo conectado
+  Future<bool> get isConnected => _connection.isConnected();
 
-  /// Envia comandos para impressão de recibos.
-  /// [config] contém configurações como largura, alinhamento etc.
-  /// [data] é a lista de linhas de texto a serem impressas.
-  Future<bool> printReceipt({
-    required Map<String, dynamic> config,
-    required List<LineText> data,
-  }) {
-    final args = {
-      'config': config,
-      'data': data.map((m) => m.toJson()).toList(),
-    };
-    return _channel.invokeMethod('printReceipt', args).then((_) => true);
+  // === IMPRESSÃO ===
+
+  /// Imprime recibo com a lista de textos e configuração
+  Future<bool> printReceipt(
+      {required Map<String, dynamic> config,
+      required List<LineText> data}) async {
+    try {
+      return await _printer.printReceipt(config: config, data: data);
+    } catch (e) {
+      throw BluetoothPrintException(
+          'print_receipt_error', 'Erro ao imprimir recibo: $e');
+    }
   }
 
-  /// Envia comandos para impressão de etiquetas.
-  /// Estrutura semelhante à impressão de recibo.
-  Future<bool> printLabel({
-    required Map<String, dynamic> config,
-    required List<LineText> data,
-  }) {
-    final args = {
-      'config': config,
-      'data': data.map((m) => m.toJson()).toList(),
-    };
-    return _channel.invokeMethod('printLabel', args).then((_) => true);
+  /// Imprime etiqueta com a lista de textos e configuração
+  Future<bool> printLabel(
+      Map<String, dynamic> config, List<LineText> data) async {
+    try {
+      return await _printer.printLabel(config: config, data: data);
+    } catch (e) {
+      throw BluetoothPrintException(
+          'print_label_error', 'Erro ao imprimir etiqueta: $e');
+    }
   }
 
-  /// Envia um comando de teste para verificar a impressora.
-  Future<dynamic> printTest() => _channel.invokeMethod('printTest');
-
-  /// Fecha todos os streams e libera os recursos usados pela instância.
-  void dispose() {
-    _methodStreamController.close();
-    _isScanningController.close();
-    _scanResultsController.close();
-    _stopScanController.close();
+  /// Testa a impressora
+  Future<dynamic> printTest() async {
+    try {
+      return await _printer.printTest();
+    } catch (e) {
+      throw BluetoothPrintException(
+          'print_test_error', 'Erro no teste de impressão: $e');
+    }
   }
-}
 
-/// Enumeração que representa os possíveis estados do Bluetooth no dispositivo.
-enum BluetoothPrintStatus {
-  on, // Ligado
-  off, // Desligado
-  turningOn, // Ligando
-  turningOff, // Desligando
-  connected, // Dispositivo conectado
-  disconnected, // Dispositivo desconectado
-  unknown, // Estado desconhecido
+  // === STATUS ===
+
+  /// Stream do estado do bluetooth (on, off, conectado, etc)
+  Stream<BluetoothPrintStatus> get state => _state.state;
+
+  /// Verifica se bluetooth está disponível
+  Future<bool> get isAvailable async {
+    try {
+      return await _channel.invokeMethod('isAvailable');
+    } catch (e) {
+      throw BluetoothPrintException(
+          'availability_error', 'Erro ao verificar disponibilidade: $e');
+    }
+  }
+
+  /// Verifica se bluetooth está ligado
+  Future<bool> get isOn async {
+    try {
+      return await _channel.invokeMethod('isOn');
+    } catch (e) {
+      throw BluetoothPrintException(
+          'power_error', 'Erro ao verificar se está ligado: $e');
+    }
+  }
 }

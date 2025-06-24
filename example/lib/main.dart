@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:developer';
 
+import 'package:bluetooth_print/bluetooth_state.dart';
 import 'package:flutter/material.dart';
 import 'package:bluetooth_print/bluetooth_print.dart';
 import 'package:bluetooth_print/bluetooth_print_model.dart';
@@ -26,7 +27,7 @@ class BluetoothPrintExamplePage extends StatefulWidget {
 }
 
 class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
-  final BluetoothPrint bluetoothPrint = BluetoothPrint.instance;
+  final BluetoothPrint bluetoothPrint = BluetoothPrint();
   List<BluetoothDevice> devices = [];
   BluetoothDevice? selectedDevice;
   bool bluetoothOn = false;
@@ -62,7 +63,8 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
 
   void scanDevices() async {
     log('bluetoothPrint.scanDevices');
-    if (await bluetoothPrint.isConnected == true) {
+    final isCon = await bluetoothPrint.isConnected;
+    if (isCon) {
       await bluetoothPrint.disconnect();
     }
     if (await bluetoothPrint.isOn) {
@@ -82,9 +84,10 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
 
   void connectToDevice(BluetoothDevice device) async {
     log('bluetoothPrint.connectToDevice');
-    if (isConnecting) return; // Evita múltiplos cliques
+    if (isConnecting || isConnected) return; // Evita múltiplos cliques
     setState(() {
       isConnecting = true;
+      selectedDevice = device;
     });
     try {
       final connected = await bluetoothPrint.connect(device);
@@ -92,11 +95,13 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
       if (connected) {
         setState(() {
           isConnected = true;
-          selectedDevice = device;
         });
       } else {
         // Mostrar mensagem de erro
         if (mounted) {
+          setState(() {
+            selectedDevice = null;
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Falha ao conectar ao dispositivo')),
           );
@@ -104,6 +109,9 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
       }
     } catch (e) {
       if (mounted) {
+        setState(() {
+          selectedDevice = null;
+        });
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Erro: ${e.toString()}')));
@@ -203,10 +211,17 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
                                 subtitle: Text(device.address ?? ''),
                                 trailing:
                                     selectedDevice?.address == device.address
-                                    ? const Icon(
-                                        Icons.check,
-                                        color: Colors.green,
-                                      )
+                                    ? isConnected
+                                          ? const Icon(
+                                              Icons.check,
+                                              color: Colors.green,
+                                              size: 20,
+                                            )
+                                          : SizedBox.square(
+                                              dimension: 20,
+                                              child:
+                                                  CircularProgressIndicator(),
+                                            )
                                     : null,
                                 onTap: () => connectToDevice(device),
                               );
