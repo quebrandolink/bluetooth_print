@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:bluetooth_print/bluetooth_print_exception.dart';
 import 'package:flutter/services.dart';
+
 import 'bluetooth_print_model.dart';
 
 /// Interface para escaneamento Bluetooth
@@ -24,11 +25,13 @@ class MethodChannelBluetoothScanner implements IBluetoothScanner {
       StreamController.broadcast();
   final StreamController<bool> _isScanningController =
       StreamController.broadcast();
-  List<BluetoothDevice> _results = [];
+  final List<BluetoothDevice> _results = [];
   bool _scanning = false;
 
+  @override
   Stream<List<BluetoothDevice>> get scanResults =>
       _scanResultsController.stream;
+  @override
   Stream<bool> get isScanning => _isScanningController.stream;
 
   final StreamController<void> _stopScanController =

@@ -1,15 +1,16 @@
 package com.example.bluetooth_print;
 
-import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
 import com.gprinter.io.*;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -499,98 +500,86 @@ public class DeviceConnFactoryManager {
         }
     }
 
-    /**
-     * Handler para processar mensagens e eventos da impressora
-     */
-    @SuppressLint("HandlerLeak")
-    private final Handler mHandler = new Handler() {
+    private final Handler mHandler = new DeviceHandler(this);
+
+    private static class DeviceHandler extends Handler {
+        private final WeakReference<DeviceConnFactoryManager> managerRef;
+
+        DeviceHandler(DeviceConnFactoryManager manager) {
+            super(Looper.getMainLooper());
+            managerRef = new WeakReference<>(manager);
+        }
+
         @Override
         public void handleMessage(Message msg) {
+            DeviceConnFactoryManager manager = managerRef.get();
+            if (manager == null) return;
             switch (msg.what) {
                 case Constant.abnormal_Disconnection:
                     Log.d(TAG, "******************* Desconexão anormal");
-                    sendStateBroadcast(Constant.abnormal_Disconnection);
+                    manager.sendStateBroadcast(Constant.abnormal_Disconnection);
                     break;
                 case DEFAUIT_COMMAND:
-                    // Modo padrão (não implementado)
                     break;
                 case READ_DATA:
                     int cnt = msg.getData().getInt(READ_DATA_CNT);
                     byte[] buffer = msg.getData().getByteArray(READ_BUFFER_ARRAY);
-                    if (buffer == null) {
-                        return;
-                    }
-                    int result = judgeResponseType(buffer[0]);
+                    if (buffer == null) return;
+                    int result = manager.judgeResponseType(buffer[0]);
                     String status = "";
-                    if (sendCommand == esc) {
-                        if (currentPrinterCommand == null) {
-                            currentPrinterCommand = PrinterCommand.ESC;
-                            sendStateBroadcast(CONN_STATE_CONNECTED);
+                    if (manager.sendCommand == manager.esc) {
+                        if (manager.currentPrinterCommand == null) {
+                            manager.currentPrinterCommand = PrinterCommand.ESC;
+                            manager.sendStateBroadcast(CONN_STATE_CONNECTED);
                         } else {
                             if (result == 0) {
-                                // Broadcast com status da impressora
                                 Intent intent = new Intent(ACTION_QUERY_PRINTER_STATE);
-                                intent.putExtra(DEVICE_ID, macAddress);
-                                if (mContext != null) {
-                                    mContext.sendBroadcast(intent);
-                                }
+                                intent.putExtra(DEVICE_ID, manager.macAddress);
+                                if (manager.mContext != null) manager.mContext.sendBroadcast(intent);
                             } else if (result == 1) {
-                                // Interpreta os status da impressora
-                                if ((buffer[0] & ESC_STATE_PAPER_ERR) > 0) {
+                                if ((buffer[0] & ESC_STATE_PAPER_ERR) > 0)
                                     status += "******************* Impressora sem papel";
-                                }
-                                if ((buffer[0] & ESC_STATE_COVER_OPEN) > 0) {
+                                if ((buffer[0] & ESC_STATE_COVER_OPEN) > 0)
                                     status += "******************* Tampa da impressora aberta";
-                                }
-                                if ((buffer[0] & ESC_STATE_ERR_OCCURS) > 0) {
+                                if ((buffer[0] & ESC_STATE_ERR_OCCURS) > 0)
                                     status += "******************* Erro na impressora";
-                                }
                                 Log.d(TAG, status);
                             }
                         }
-                    } else if (sendCommand == tsc) {
-                        if (currentPrinterCommand == null) {
-                            currentPrinterCommand = PrinterCommand.TSC;
-                            sendStateBroadcast(CONN_STATE_CONNECTED);
+                    } else if (manager.sendCommand == manager.tsc) {
+                        if (manager.currentPrinterCommand == null) {
+                            manager.currentPrinterCommand = PrinterCommand.TSC;
+                            manager.sendStateBroadcast(CONN_STATE_CONNECTED);
                         } else {
                             if (cnt == 1) {
-                                if ((buffer[0] & TSC_STATE_PAPER_ERR) > 0) {
+                                if ((buffer[0] & TSC_STATE_PAPER_ERR) > 0)
                                     status += "******************* Impressora sem papel";
-                                }
-                                if ((buffer[0] & TSC_STATE_COVER_OPEN) > 0) {
+                                if ((buffer[0] & TSC_STATE_COVER_OPEN) > 0)
                                     status += "******************* Tampa da impressora aberta";
-                                }
-                                if ((buffer[0] & TSC_STATE_ERR_OCCURS) > 0) {
+                                if ((buffer[0] & TSC_STATE_ERR_OCCURS) > 0)
                                     status += "******************* Erro na impressora";
-                                }
                                 Log.d(TAG, status);
                             } else {
                                 Intent intent = new Intent(ACTION_QUERY_PRINTER_STATE);
-                                intent.putExtra(DEVICE_ID, macAddress);
-                                if (mContext != null) {
-                                    mContext.sendBroadcast(intent);
-                                }
+                                intent.putExtra(DEVICE_ID, manager.macAddress);
+                                if (manager.mContext != null) manager.mContext.sendBroadcast(intent);
                             }
                         }
-                    } else if (sendCommand == cpcl) {
-                        if (currentPrinterCommand == null) {
-                            currentPrinterCommand = PrinterCommand.CPCL;
-                            sendStateBroadcast(CONN_STATE_CONNECTED);
+                    } else if (manager.sendCommand == manager.cpcl) {
+                        if (manager.currentPrinterCommand == null) {
+                            manager.currentPrinterCommand = PrinterCommand.CPCL;
+                            manager.sendStateBroadcast(CONN_STATE_CONNECTED);
                         } else {
                             if (cnt == 1) {
-                                if ((buffer[0] == CPCL_STATE_PAPER_ERR)) {
+                                if (buffer[0] == CPCL_STATE_PAPER_ERR)
                                     status += "******************* Impressora sem papel";
-                                }
-                                if ((buffer[0] == CPCL_STATE_COVER_OPEN)) {
+                                if (buffer[0] == CPCL_STATE_COVER_OPEN)
                                     status += "******************* Tampa da impressora aberta";
-                                }
                                 Log.d(TAG, status);
                             } else {
                                 Intent intent = new Intent(ACTION_QUERY_PRINTER_STATE);
-                                intent.putExtra(DEVICE_ID, macAddress);
-                                if (mContext != null) {
-                                    mContext.sendBroadcast(intent);
-                                }
+                                intent.putExtra(DEVICE_ID, manager.macAddress);
+                                if (manager.mContext != null) manager.mContext.sendBroadcast(intent);
                             }
                         }
                     }
@@ -599,7 +588,7 @@ public class DeviceConnFactoryManager {
                     break;
             }
         }
-    };
+    }
 
     /**
      * Envia um broadcast com o estado da conexão

@@ -1,14 +1,17 @@
 // === bluetooth_print.dart ===
 
+// ignore_for_file: constant_identifier_names
+
 import 'dart:async';
+
 import 'package:flutter/services.dart';
 
 import 'bluetooth_connection.dart';
-import 'bluetooth_scanner.dart';
-import 'bluetooth_printer.dart';
-import 'bluetooth_state.dart';
-import 'bluetooth_print_model.dart';
 import 'bluetooth_print_exception.dart';
+import 'bluetooth_print_model.dart';
+import 'bluetooth_printer.dart';
+import 'bluetooth_scanner.dart';
+import 'bluetooth_state.dart';
 
 /// Classe unificada que encapsula todas as funcionalidades Bluetooth
 /// usando as implementações baseadas nos princípios SOLID.
@@ -26,11 +29,11 @@ class BluetoothPrint {
   late final IBluetoothState _state;
 
   BluetoothPrint._internal() {
-    final _methodStreamController = StreamController<MethodCall>.broadcast();
+    final methodStreamController = StreamController<MethodCall>.broadcast();
 
     _channel.setMethodCallHandler((call) async {
-      if (!_methodStreamController.isClosed) {
-        _methodStreamController.add(call);
+      if (!methodStreamController.isClosed) {
+        methodStreamController.add(call);
       }
     });
 

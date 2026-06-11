@@ -1,3 +1,5 @@
+// ignore_for_file: constant_identifier_names
+
 /// Representa um dispositivo Bluetooth detectado ou emparelhado.
 class BluetoothDevice {
   /// Nome do dispositivo (pode ser nulo).
