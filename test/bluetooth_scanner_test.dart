@@ -1,6 +1,6 @@
-import 'package:bluetooth_print/bluetooth_print_exception.dart';
-import 'package:bluetooth_print/bluetooth_print_model.dart';
-import 'package:bluetooth_print/bluetooth_scanner.dart';
+import 'package:bluetooth_print/src/bluetooth_print_exception.dart';
+import 'package:bluetooth_print/src/models/bluetooth_device.dart';
+import 'package:bluetooth_print/src/bluetooth_scanner.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,8 +11,7 @@ void main() {
     late MethodChannelBluetoothScanner scanner;
 
     setUp(() {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
         const MethodChannel('bluetooth_print/methods'),
         (methodCall) async {
           switch (methodCall.method) {
@@ -32,8 +31,7 @@ void main() {
     });
 
     tearDown(() {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
         const MethodChannel('bluetooth_print/methods'),
         null,
       );
@@ -44,9 +42,7 @@ void main() {
       test('deve retornar stream de dispositivos', () async {
         final devices = <BluetoothDevice>[];
 
-        await scanner
-            .scan(timeout: Duration(milliseconds: 100))
-            .forEach(devices.add);
+        await scanner.scan(timeout: Duration(milliseconds: 100)).forEach(devices.add);
 
         expect(devices, isA<List<BluetoothDevice>>());
       });
@@ -87,12 +83,10 @@ void main() {
 
       test('deve emitir dispositivos quando receber MethodCall', () async {
         final devices = <BluetoothDevice>[];
-        final scanSubscription =
-            scanner.scan(timeout: Duration(seconds: 1)).listen(devices.add);
+        final scanSubscription = scanner.scan(timeout: Duration(seconds: 1)).listen(devices.add);
 
         // Simular MethodCall com dispositivo
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .handlePlatformMessage(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
           'bluetooth_print/methods',
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('ScanResult', {
@@ -114,12 +108,10 @@ void main() {
 
       test('deve ignorar dispositivos sem endereço', () async {
         final devices = <BluetoothDevice>[];
-        final scanSubscription =
-            scanner.scan(timeout: Duration(seconds: 1)).listen(devices.add);
+        final scanSubscription = scanner.scan(timeout: Duration(seconds: 1)).listen(devices.add);
 
         // Simular MethodCall sem endereço
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .handlePlatformMessage(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
           'bluetooth_print/methods',
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('ScanResult', {
@@ -139,12 +131,10 @@ void main() {
 
       test('deve tratar endereço com case insensitive', () async {
         final devices = <BluetoothDevice>[];
-        final scanSubscription =
-            scanner.scan(timeout: Duration(seconds: 1)).listen(devices.add);
+        final scanSubscription = scanner.scan(timeout: Duration(seconds: 1)).listen(devices.add);
 
         // Enviar mesmo dispositivo com cases diferentes
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .handlePlatformMessage(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
           'bluetooth_print/methods',
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('ScanResult', {
@@ -156,8 +146,7 @@ void main() {
           (data) {},
         );
 
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .handlePlatformMessage(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
           'bluetooth_print/methods',
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('ScanResult', {
@@ -179,12 +168,10 @@ void main() {
 
       test('deve atualizar dispositivo existente quando dados mudam', () async {
         final devices = <BluetoothDevice>[];
-        final scanSubscription =
-            scanner.scan(timeout: Duration(seconds: 1)).listen(devices.add);
+        final scanSubscription = scanner.scan(timeout: Duration(seconds: 1)).listen(devices.add);
 
         // Enviar dispositivo inicial
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .handlePlatformMessage(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
           'bluetooth_print/methods',
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('ScanResult', {
@@ -199,8 +186,7 @@ void main() {
         await Future.delayed(Duration(milliseconds: 20));
 
         // Atualizar mesmo dispositivo
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .handlePlatformMessage(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
           'bluetooth_print/methods',
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('ScanResult', {
@@ -223,12 +209,10 @@ void main() {
 
     group('startScan()', () {
       test('deve retornar lista de dispositivos', () async {
-        final scanSubscription =
-            scanner.scan(timeout: Duration(milliseconds: 100)).listen((_) {});
+        final scanSubscription = scanner.scan(timeout: Duration(milliseconds: 100)).listen((_) {});
 
         // Simular MethodCall com dispositivo
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .handlePlatformMessage(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
           'bluetooth_print/methods',
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('ScanResult', {
@@ -240,8 +224,7 @@ void main() {
           (data) {},
         );
 
-        final devices =
-            await scanner.startScan(timeout: Duration(milliseconds: 100));
+        final devices = await scanner.startScan(timeout: Duration(milliseconds: 100));
 
         await scanSubscription.cancel();
 
@@ -275,8 +258,7 @@ void main() {
       });
 
       test('deve lançar BluetoothPrintException em erro', () async {
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
           const MethodChannel('bluetooth_print/methods'),
           (methodCall) async {
             if (methodCall.method == 'stopScan') {
@@ -296,8 +278,7 @@ void main() {
       });
 
       test('deve atualizar status mesmo com erro', () async {
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
           const MethodChannel('bluetooth_print/methods'),
           (methodCall) async {
             if (methodCall.method == 'stopScan') {
@@ -346,12 +327,10 @@ void main() {
         final results = <List<BluetoothDevice>>[];
         final subscription = scanner.scanResults.listen(results.add);
 
-        final scanSubscription =
-            scanner.scan(timeout: Duration(seconds: 1)).listen((_) {});
+        final scanSubscription = scanner.scan(timeout: Duration(seconds: 1)).listen((_) {});
 
         // Simular MethodCall com dispositivo
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .handlePlatformMessage(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
           'bluetooth_print/methods',
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('ScanResult', {
@@ -390,12 +369,10 @@ void main() {
         final results = <List<BluetoothDevice>>[];
         final subscription = scanner.scanResults.listen(results.add);
 
-        final scanSubscription =
-            scanner.scan(timeout: Duration(seconds: 1)).listen((_) {});
+        final scanSubscription = scanner.scan(timeout: Duration(seconds: 1)).listen((_) {});
 
         // Enviar mesmo dispositivo duas vezes
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .handlePlatformMessage(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
           'bluetooth_print/methods',
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('ScanResult', {
@@ -407,8 +384,7 @@ void main() {
           (data) {},
         );
 
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .handlePlatformMessage(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
           'bluetooth_print/methods',
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('ScanResult', {
@@ -445,8 +421,7 @@ void main() {
 
         final subscription = scanner.isScanning.listen(statuses.add);
 
-        final scanSubscription =
-            scanner.scan(timeout: Duration(milliseconds: 200)).listen((_) {});
+        final scanSubscription = scanner.scan(timeout: Duration(milliseconds: 200)).listen((_) {});
 
         await Future.delayed(Duration(milliseconds: 100));
 
@@ -526,8 +501,7 @@ void main() {
       });
 
       test('deve parar scan em andamento', () async {
-        final scanSubscription =
-            scanner.scan(timeout: Duration(seconds: 1)).listen((_) {});
+        final scanSubscription = scanner.scan(timeout: Duration(seconds: 1)).listen((_) {});
 
         await Future.delayed(Duration(milliseconds: 50));
         scanner.dispose();
@@ -619,12 +593,10 @@ void main() {
     group('Edge Cases', () {
       test('deve ignorar dispositivos com endereço vazio', () async {
         final devices = <BluetoothDevice>[];
-        final scanSubscription =
-            scanner.scan(timeout: Duration(seconds: 1)).listen(devices.add);
+        final scanSubscription = scanner.scan(timeout: Duration(seconds: 1)).listen(devices.add);
 
         // Simular MethodCall com endereço vazio
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .handlePlatformMessage(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
           'bluetooth_print/methods',
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('ScanResult', {
@@ -644,12 +616,10 @@ void main() {
 
       test('deve normalizar endereço com trim', () async {
         final devices = <BluetoothDevice>[];
-        final scanSubscription =
-            scanner.scan(timeout: Duration(seconds: 1)).listen(devices.add);
+        final scanSubscription = scanner.scan(timeout: Duration(seconds: 1)).listen(devices.add);
 
         // Enviar endereço com espaços
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .handlePlatformMessage(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
           'bluetooth_print/methods',
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('ScanResult', {
@@ -673,8 +643,7 @@ void main() {
         final statuses = <bool>[];
         final statusSub = scanner.isScanning.listen(statuses.add);
 
-        final scanSubscription =
-            scanner.scan(timeout: Duration(seconds: 1)).listen((_) {});
+        final scanSubscription = scanner.scan(timeout: Duration(seconds: 1)).listen((_) {});
 
         await Future.delayed(Duration(milliseconds: 50));
         await scanSubscription.cancel();
@@ -687,12 +656,10 @@ void main() {
 
       test('deve handle MethodCall com argumentos inválidos', () async {
         final devices = <BluetoothDevice>[];
-        final scanSubscription =
-            scanner.scan(timeout: Duration(seconds: 1)).listen(devices.add);
+        final scanSubscription = scanner.scan(timeout: Duration(seconds: 1)).listen(devices.add);
 
         // Simular MethodCall com JSON inválido - vamos usar um Map inválido em vez de String
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .handlePlatformMessage(
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
           'bluetooth_print/methods',
           const StandardMethodCodec().encodeMethodCall(
             MethodCall('ScanResult', {

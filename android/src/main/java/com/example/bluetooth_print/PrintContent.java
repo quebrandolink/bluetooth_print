@@ -48,7 +48,7 @@ public class PrintContent {
 
             // Estrutura dos elementos:
             // {type:'text|barcode|qrcode|image', content:'', size:4, align: 0|1|2, weight:
-            // 0|1, width:0|1, height:0|1, underline:0|1, linefeed: 0|1}
+            // 0|1, width:0|1, height:0|1, underline:0|1, reverse:0|1, linefeed: 0|1|2|...}
             for (Map<String, Object> m : list) {
                   String type = (String) m.get("type");
                   String content = (String) m.get("content");
@@ -58,13 +58,13 @@ public class PrintContent {
                   int width = (int) (m.get("width") == null ? 0 : m.get("width"));
                   int height = (int) (m.get("height") == null ? 0 : m.get("height"));
                   int underline = (int) (m.get("underline") == null ? 0 : m.get("underline"));
+                  int reverse = (int) (m.get("reverse") == null ? 0 : m.get("reverse"));
                   int linefeed = (int) (m.get("linefeed") == null ? 0 : m.get("linefeed"));
 
                   // Configurações de formatação
                   EscCommand.ENABLE emphasized = weight == 0 ? EscCommand.ENABLE.OFF : EscCommand.ENABLE.ON;
-                  EscCommand.ENABLE doublewidth = width == 0 ? EscCommand.ENABLE.OFF : EscCommand.ENABLE.ON;
-                  EscCommand.ENABLE doubleheight = height == 0 ? EscCommand.ENABLE.OFF : EscCommand.ENABLE.ON;
                   EscCommand.ENABLE isUnderline = underline == 0 ? EscCommand.ENABLE.OFF : EscCommand.ENABLE.ON;
+                  EscCommand.ENABLE isReverse = reverse == 0 ? EscCommand.ENABLE.OFF : EscCommand.ENABLE.ON;
 
                   // Alinhamento do texto
                   esc.addSelectJustification(align == 0 ? EscCommand.JUSTIFICATION.LEFT
@@ -72,42 +72,38 @@ public class PrintContent {
 
                   if ("text".equals(type)) {
                         try {
-                              // Converte para ISO-8859-1 para suportar caracteres portugueses
-                              byte[] textBytes = content.getBytes("ISO-8859-1");
-                              String encodedContent = new String(textBytes, "ISO-8859-1");
-
                               // Posicionamento absoluto/relativo
                               int absolutePos = (int) (m.get("absolutePos") == null ? 0 : m.get("absolutePos"));
                               int relativePos = (int) (m.get("relativePos") == null ? 0 : m.get("relativePos"));
-                              int fontZoom = (int) (m.get("fontZoom") == null ? 1 : m.get("fontZoom"));
                               short aPos = (short) absolutePos;
                               short rPos = (short) relativePos;
-                              Log.e(TAG, "Posicionamento absoluto: " + aPos + ", relativo: " + rPos + ", zoom: "
-                                          + fontZoom);
+                              Log.e(TAG, "Posicionamento absoluto: " + aPos + ", relativo: " + rPos);
 
                               // Define posições e formatação
                               esc.addSetAbsolutePrintPosition(aPos);
                               esc.addSetRelativePrintPositon(rPos);
-                              esc.addSelectPrintModes(EscCommand.FONT.FONTA, emphasized, doubleheight, doublewidth,
-                                          isUnderline);
+                              esc.addSelectPrintModes(EscCommand.FONT.FONTA, emphasized, EscCommand.ENABLE.OFF,
+                                          EscCommand.ENABLE.OFF, isUnderline);
+                              applyTextCharSize(esc, m, width, height);
+                              esc.addTurnReverseModeOnOrOff(isReverse);
 
-                              // Aplica zoom se necessário
-                              if (fontZoom > 1) {
-                                    esc.addSetKanjiFontMode(EscCommand.ENABLE.ON, EscCommand.ENABLE.ON,
-                                                EscCommand.ENABLE.OFF);
-                              } else {
-                                    esc.addSetKanjiFontMode(EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF,
-                                                EscCommand.ENABLE.OFF);
+                              // Envia bytes Windows-1252 diretamente para evitar re-codificação UTF-8
+                              // pela biblioteca interna (a impressora já foi configurada para WPC1252)
+                              try {
+                                    esc.addUserCommand(content.getBytes("windows-1252"));
+                              } catch (UnsupportedEncodingException ex) {
+                                    esc.addUserCommand(content.getBytes("ISO-8859-1"));
                               }
 
-                              esc.addText(content);
-                              // Restaura formatação padrão
+                              // Restaura tamanho padrão (1×) após imprimir
+                              esc.addSetCharcterSize(EscCommand.WIDTH_ZOOM.MUL_1, EscCommand.HEIGHT_ZOOM.MUL_1);
                               esc.addSelectPrintModes(EscCommand.FONT.FONTA, EscCommand.ENABLE.OFF,
                                           EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF, EscCommand.ENABLE.OFF);
+                              esc.addTurnReverseModeOnOrOff(EscCommand.ENABLE.OFF);
 
                         } catch (UnsupportedEncodingException e) {
                               Log.e(TAG, "Erro na codificação: " + e.getMessage());
-                              esc.addText(content); // Fallback para codificação padrão
+                              esc.addText(content);
                         }
 
                   } else if ("barcode".equals(type)) {
@@ -115,7 +111,7 @@ public class PrintContent {
                         esc.addSelectPrintingPositionForHRICharacters(EscCommand.HRI_POSITION.BELOW);
                         esc.addSetBarcodeHeight((byte) 60);
                         esc.addSetBarcodeWidth((byte) 2);
-                        esc.addCODE128(esc.genCodeB(content));
+                        esc.addCODE128(code128Payload(esc, content));
                   } else if ("qrcode".equals(type)) {
                         // Configura e imprime QR Code
                         esc.addSelectErrorCorrectionLevelForQRCode((byte) 0x31);
@@ -127,18 +123,26 @@ public class PrintContent {
                         byte[] bytes = Base64.decode(content, Base64.DEFAULT);
                         Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
 
+                        if (bitmap == null) {
+                              Log.e(TAG, "Falha ao decodificar imagem base64");
+                              continue;
+                        }
+
                         // Ajusta proporções para formato retrato
                         if (bitmap.getHeight() > bitmap.getWidth()) {
                               int startY = (bitmap.getHeight() - bitmap.getWidth()) / 2;
                               bitmap = Bitmap.createBitmap(bitmap, 0, startY, bitmap.getWidth(), bitmap.getWidth());
                         }
 
-                        esc.addRastBitImage(bitmap, width, 0);
+                        // width <= 1 indica TextWidth enum (0=normal,1=doubled), não pixel width.
+                        // Nesses casos usa a largura natural do bitmap.
+                        int imageWidth = width > 1 ? width : bitmap.getWidth();
+                        esc.addRastBitImage(bitmap, imageWidth, 0);
                   }
 
-                  // Avança linha se configurado
-                  if (linefeed == 1) {
-                        esc.addPrintAndLineFeed();
+                  // Avança linha(s) se configurado
+                  if (linefeed > 0) {
+                        esc.addPrintAndFeedLines((byte) Math.min(linefeed, 255));
                   }
             }
 
@@ -229,5 +233,46 @@ public class PrintContent {
             // Implementação básica - pode ser expandida conforme necessidade
             Vector<Byte> datas = cpcl.getCommand();
             return datas;
+      }
+
+      /**
+       * Aplica escala de caractere via GS ! (width/height independentes ou fontZoom).
+       *
+       * fontZoom ausente → width/height controlam 1× ou 2× cada eixo.
+       * fontZoom presente e > 1 → escala proporcional (FontSize.x2–x8).
+       */
+      private static void applyTextCharSize(EscCommand esc, Map<String, Object> m, int width, int height) {
+            boolean hasFontZoom = m.containsKey("fontZoom");
+            int fontZoom = hasFontZoom ? (int) m.get("fontZoom") : 1;
+
+            EscCommand.WIDTH_ZOOM wZoom;
+            EscCommand.HEIGHT_ZOOM hZoom;
+
+            if (hasFontZoom && fontZoom > 1) {
+                  wZoom = EscCommand.WIDTH_ZOOM.values()[fontZoom - 1];
+                  hZoom = EscCommand.HEIGHT_ZOOM.values()[fontZoom - 1];
+            } else if (!hasFontZoom) {
+                  wZoom = width == 0 ? EscCommand.WIDTH_ZOOM.MUL_1 : EscCommand.WIDTH_ZOOM.MUL_2;
+                  hZoom = height == 0 ? EscCommand.HEIGHT_ZOOM.MUL_1 : EscCommand.HEIGHT_ZOOM.MUL_2;
+            } else {
+                  wZoom = EscCommand.WIDTH_ZOOM.MUL_1;
+                  hZoom = EscCommand.HEIGHT_ZOOM.MUL_1;
+            }
+
+            esc.addSetCharcterSize(wZoom, hZoom);
+      }
+
+      /**
+       * Monta o payload CODE128 enviado à impressora.
+       *
+       * genCodeB prefixa {@code {B} para selecionar o subset B — necessário para
+       * alfanuméricos, mas várias impressoras exibem esse prefixo no HRI (texto
+       * legível abaixo das barras). Para conteúdo só numérico, envia o valor direto.
+       */
+      private static String code128Payload(EscCommand esc, String content) {
+            if (content != null && content.matches("\\d+")) {
+                  return content;
+            }
+            return esc.genCodeB(content);
       }
 }

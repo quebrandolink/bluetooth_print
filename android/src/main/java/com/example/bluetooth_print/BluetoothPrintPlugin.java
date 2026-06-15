@@ -351,6 +351,25 @@ public class BluetoothPrintPlugin
             return;
         }
 
+        // Impressoras conectadas via Classic BT param de anunciar via BLE após a
+        // conexão, fazendo com que sumam do próximo scan. Para cobrir esse caso,
+        // reemite dispositivos pareados que já foram usados via este plugin na
+        // sessão atual (registrados em deviceConnFactoryManagers). Isso evita
+        // mostrar todos os dispositivos pareados do aparelho.
+        try {
+            java.util.Set<String> knownAddresses =
+                    DeviceConnFactoryManager.getDeviceConnFactoryManagers().keySet();
+            if (!knownAddresses.isEmpty()) {
+                for (BluetoothDevice device : mBluetoothAdapter.getBondedDevices()) {
+                    if (device.getName() != null && knownAddresses.contains(device.getAddress())) {
+                        invokeMethodUIThread("ScanResult", device);
+                    }
+                }
+            }
+        } catch (SecurityException e) {
+            Log.w(TAG, "Sem permissão para listar dispositivos pareados", e);
+        }
+
         try {
             startScan();
             result.success(null);

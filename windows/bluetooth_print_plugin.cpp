@@ -373,6 +373,59 @@ void BluetoothPrintPlugin::SendStateEvent(int state) {
 // Printing (ESC/POS)
 // ---------------------------------------------------------------------------
 
+namespace {
+
+// Converte UTF-8 para Windows-1252 (CP1252). Caracteres sem mapeamento viram '?'.
+static std::vector<uint8_t> Utf8ToWindows1252(const std::string& utf8) {
+  // Mapeamento dos bytes 0x80-0x9F (exclusivos do CP1252 vs ISO-8859-1)
+  static const uint32_t kCp1252Extra[32] = {
+    0x20AC, 0,      0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021,
+    0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0,      0x017D, 0,
+    0,      0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
+    0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0,      0x017E, 0x0178
+  };
+
+  std::vector<uint8_t> out;
+  size_t i = 0;
+  while (i < utf8.size()) {
+    uint32_t cp = 0;
+    uint8_t c = static_cast<uint8_t>(utf8[i]);
+    if (c < 0x80) {
+      cp = c; i += 1;
+    } else if ((c & 0xE0) == 0xC0 && i + 1 < utf8.size()) {
+      cp = ((c & 0x1F) << 6) | (static_cast<uint8_t>(utf8[i+1]) & 0x3F); i += 2;
+    } else if ((c & 0xF0) == 0xE0 && i + 2 < utf8.size()) {
+      cp = ((c & 0x0F) << 12) | ((static_cast<uint8_t>(utf8[i+1]) & 0x3F) << 6)
+                               |  (static_cast<uint8_t>(utf8[i+2]) & 0x3F); i += 3;
+    } else if ((c & 0xF8) == 0xF0 && i + 3 < utf8.size()) {
+      cp = ((c & 0x07) << 18) | ((static_cast<uint8_t>(utf8[i+1]) & 0x3F) << 12)
+                               | ((static_cast<uint8_t>(utf8[i+2]) & 0x3F) << 6)
+                               |  (static_cast<uint8_t>(utf8[i+3]) & 0x3F); i += 4;
+    } else {
+      out.push_back('?'); i++; continue;
+    }
+
+    if (cp < 0x80) {
+      out.push_back(static_cast<uint8_t>(cp));
+    } else if (cp >= 0xA0 && cp <= 0xFF) {
+      out.push_back(static_cast<uint8_t>(cp));
+    } else {
+      bool found = false;
+      for (int j = 0; j < 32; j++) {
+        if (kCp1252Extra[j] == cp) {
+          out.push_back(static_cast<uint8_t>(0x80 + j));
+          found = true;
+          break;
+        }
+      }
+      if (!found) out.push_back('?');
+    }
+  }
+  return out;
+}
+
+}  // namespace
+
 std::vector<uint8_t> BluetoothPrintPlugin::BuildEscReceipt(
     const flutter::EncodableMap& config,
     const flutter::EncodableList& data) {
@@ -380,6 +433,8 @@ std::vector<uint8_t> BluetoothPrintPlugin::BuildEscReceipt(
 
   // Initialize printer
   buf.insert(buf.end(), {0x1B, 0x40});
+  // Seleciona codepage WPC1252 (Windows-1252) — suporte a acentos portugueses e travessão
+  buf.insert(buf.end(), {0x1B, 0x74, 0x10});
 
   for (const auto& item_val : data) {
     const auto* item = std::get_if<flutter::EncodableMap>(&item_val);
@@ -413,8 +468,9 @@ std::vector<uint8_t> BluetoothPrintPlugin::BuildEscReceipt(
     uint8_t esc_size = (font_size >= 2) ? 0x11 : 0x00;
     buf.insert(buf.end(), {0x1D, 0x21, esc_size});
 
-    // Text content (UTF-8)
-    buf.insert(buf.end(), content.begin(), content.end());
+    // Texto codificado em Windows-1252 para compatibilidade com o codepage da impressora
+    auto encoded = Utf8ToWindows1252(content);
+    buf.insert(buf.end(), encoded.begin(), encoded.end());
     buf.push_back(0x0A);  // newline
   }
 

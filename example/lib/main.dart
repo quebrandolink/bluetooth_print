@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:developer';
 
-import 'package:bluetooth_print/bluetooth_state.dart';
 import 'package:flutter/material.dart';
 import 'package:bluetooth_print/bluetooth_print.dart';
-import 'package:bluetooth_print/bluetooth_print_model.dart';
 
 void main() {
   runApp(const MyApp());
@@ -22,8 +20,7 @@ class BluetoothPrintExamplePage extends StatefulWidget {
   const BluetoothPrintExamplePage({super.key});
 
   @override
-  State<BluetoothPrintExamplePage> createState() =>
-      _BluetoothPrintExamplePageState();
+  State<BluetoothPrintExamplePage> createState() => _BluetoothPrintExamplePageState();
 }
 
 class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
@@ -73,9 +70,7 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
         isConnected = false;
         selectedDevice = null;
       });
-      final listDevices = await bluetoothPrint.startScan(
-        timeout: const Duration(seconds: 4),
-      );
+      final listDevices = await bluetoothPrint.startScan(timeout: const Duration(seconds: 4));
       setState(() {
         devices = listDevices;
       });
@@ -102,9 +97,7 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
           setState(() {
             selectedDevice = null;
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Falha ao conectar ao dispositivo')),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao conectar ao dispositivo')));
         }
       }
     } catch (e) {
@@ -112,9 +105,7 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
         setState(() {
           selectedDevice = null;
         });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Erro: ${e.toString()}')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: ${e.toString()}')));
       }
     } finally {
       setState(() {
@@ -140,44 +131,95 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
 
     final Map<String, dynamic> config = {};
     final List<LineText> list = [
-      LineText(
-        type: LineText.TYPE_TEXT,
-        content: 'bluetooth_print',
-        align: LineText.ALIGN_CENTER,
-        width: 1,
-        height: 1,
-        weight: 1,
-        linefeed: 1,
+      LineText.text(
+        'bluetooth_print',
+        styles: const LineTextStyles(align: TextAlign.center, weight: TextWeight.bold, width: TextWidth.doubled, height: TextHeight.doubled),
+        linesAfter: 1,
       ),
-      LineText(
-        type: LineText.TYPE_TEXT,
-        content: 'Ola, teste de impressao\n',
-        align: LineText.ALIGN_CENTER,
-        linefeed: 1,
-        weight: 1,
+
+      await LineText.imageFromAsset('assets/images/logo.png', linesAfter: 1),
+      LineText.feed(),
+      LineText.text('Ola, teste de impressao', styles: LineTextStyles.centerBold, linesAfter: 1),
+      LineText.feed(),
+      LineText.text('Teste de acentuação: áéíóúàèìòùâêîôûãẽĩõũ', styles: LineTextStyles.centerBold, linesAfter: 1),
+      LineText.feed(),
+      LineText.text('Teste de caracteres especiais: ~`!@#\$\\%^&*()_+={[}]|\\:;\'",.<>/?`', styles: LineTextStyles.centerBold, linesAfter: 1),
+      LineText.feed(),
+      LineText.text(
+        'Text Reverse',
+        styles: const LineTextStyles(align: TextAlign.center, reverse: true, width: TextWidth.doubled, height: TextHeight.doubled),
+        linesAfter: 1,
       ),
-      LineText(
-        type: LineText.TYPE_QRCODE,
-        content: 'QRCODE.COM.BR',
-        align: LineText.ALIGN_CENTER,
-        linefeed: 1,
-        weight: 1,
-        size: 8,
+      LineText.feed(),
+      LineText.text('Normal (1x1)', styles: const LineTextStyles(align: TextAlign.center), linesAfter: 1),
+      LineText.text(
+        'Largo (2x1) — width doubled',
+        styles: const LineTextStyles(align: TextAlign.center, width: TextWidth.doubled),
+        linesAfter: 1,
       ),
-      LineText(
-        type: LineText.TYPE_BARCODE,
-        content: '1234567890',
-        align: LineText.ALIGN_CENTER,
-        linefeed: 1,
-        weight: 1,
-        size: 8,
+      LineText.text(
+        'Alto (1x2) — height doubled',
+        styles: const LineTextStyles(align: TextAlign.center, height: TextHeight.doubled),
+        linesAfter: 1,
       ),
-      LineText(
-        type: LineText.TYPE_TEXT,
-        content: '\n',
-        align: LineText.ALIGN_CENTER,
-        linefeed: 1,
+      LineText.text(
+        'Grande (2x2) — width e height doubled',
+        styles: const LineTextStyles(align: TextAlign.center, width: TextWidth.doubled, height: TextHeight.doubled),
+        linesAfter: 1,
       ),
+      LineText.feed(),
+      LineText.text(
+        'Fonte tamanho x1 (padrão)',
+        styles: const LineTextStyles(align: TextAlign.center, fontSize: FontSize.x1),
+        linesAfter: 1,
+      ),
+      LineText.text(
+        'Fonte tamanho x2',
+        styles: const LineTextStyles(align: TextAlign.center, fontSize: FontSize.x2),
+        linesAfter: 1,
+      ),
+      LineText.text(
+        'Fonte x3',
+        styles: const LineTextStyles(align: TextAlign.center, fontSize: FontSize.x3),
+        linesAfter: 1,
+      ),
+      LineText.text(
+        'Fonte x4',
+        styles: const LineTextStyles(align: TextAlign.center, fontSize: FontSize.x4),
+        linesAfter: 1,
+      ),
+      LineText.text(
+        'Fonte x5',
+        styles: const LineTextStyles(align: TextAlign.center, fontSize: FontSize.x5),
+        linesAfter: 1,
+      ),
+      LineText.text(
+        'Fonte x6',
+        styles: const LineTextStyles(align: TextAlign.center, fontSize: FontSize.x6),
+        linesAfter: 1,
+      ),
+      LineText.text(
+        'Fonte x7',
+        styles: const LineTextStyles(align: TextAlign.center, fontSize: FontSize.x7),
+        linesAfter: 1,
+      ),
+      LineText.text(
+        'Fonte x8',
+        styles: const LineTextStyles(align: TextAlign.center, fontSize: FontSize.x8),
+        linesAfter: 1,
+      ),
+      LineText.feed(),
+      LineText.text('Teste de não negrito', styles: LineTextStyles.center, linesAfter: 1),
+      LineText.text('Teste de negrito', styles: LineTextStyles.centerBold, linesAfter: 1),
+      LineText.text(
+        'Teste de sublinhado',
+        styles: const LineTextStyles(align: TextAlign.center, weight: TextWeight.bold, underline: true),
+        linesAfter: 1,
+      ),
+      LineText.feed(),
+      LineText.qrcode('QRCODE.COM.BR', size: 8, linesAfter: 1),
+      LineText.barcode('1234567890', size: 8, linesAfter: 1),
+      LineText.feed(),
     ];
 
     await bluetoothPrint.printReceipt(config: config, data: list);
@@ -209,19 +251,10 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
                               return ListTile(
                                 title: Text(device.name ?? 'Sem nome'),
                                 subtitle: Text(device.address ?? ''),
-                                trailing:
-                                    selectedDevice?.address == device.address
+                                trailing: selectedDevice?.address == device.address
                                     ? isConnected
-                                          ? const Icon(
-                                              Icons.check,
-                                              color: Colors.green,
-                                              size: 20,
-                                            )
-                                          : SizedBox.square(
-                                              dimension: 20,
-                                              child:
-                                                  CircularProgressIndicator(),
-                                            )
+                                          ? const Icon(Icons.check, color: Colors.green, size: 20)
+                                          : SizedBox.square(dimension: 20, child: CircularProgressIndicator())
                                     : null,
                                 onTap: () => connectToDevice(device),
                               );
@@ -235,19 +268,12 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
                               Row(
                                 children: [
                                   Expanded(
-                                    child: ElevatedButton(
-                                      onPressed: isConnected
-                                          ? printSample
-                                          : null,
-                                      child: const Text('🖨️ Imprimir Teste'),
-                                    ),
+                                    child: ElevatedButton(onPressed: isConnected ? printSample : null, child: const Text('🖨️ Imprimir Teste')),
                                   ),
                                   const SizedBox(width: 12),
                                   ElevatedButton(
                                     onPressed: isConnected ? disconnect : null,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.red,
-                                    ),
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                                     child: const Text('Desconectar'),
                                   ),
                                 ],
@@ -265,16 +291,9 @@ class _BluetoothPrintExamplePageState extends State<BluetoothPrintExamplePage> {
         initialData: false,
         builder: (c, snapshot) {
           if (snapshot.data == true) {
-            return FloatingActionButton(
-              onPressed: () => bluetoothPrint.stopScan(),
-              backgroundColor: Colors.red,
-              child: Icon(Icons.stop),
-            );
+            return FloatingActionButton(onPressed: () => bluetoothPrint.stopScan(), backgroundColor: Colors.red, child: Icon(Icons.stop));
           } else {
-            return FloatingActionButton(
-              onPressed: scanDevices,
-              child: Icon(Icons.search),
-            );
+            return FloatingActionButton(onPressed: scanDevices, child: Icon(Icons.search));
           }
         },
       ),
