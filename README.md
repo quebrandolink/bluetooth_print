@@ -89,6 +89,20 @@ import 'package:bluetooth_print/bluetooth_print_model.dart';
 final bluetoothPrint = BluetoothPrint();
 ```
 
+### Enable Bluetooth
+
+```dart
+// Shows the native system dialog on Android.
+// Returns true if Bluetooth was already on or the user accepted,
+// false if the user declined (declining does not throw).
+if (!await bluetoothPrint.enableBluetooth()) {
+  return;
+}
+```
+
+> On iOS and Windows the adapter cannot be turned on programmatically, so
+> `enableBluetooth()` just reports the current state, same as `isOn`.
+
 ### Scan for devices
 
 ```dart

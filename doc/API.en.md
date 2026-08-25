@@ -296,6 +296,32 @@ Returns `true` if the Bluetooth adapter is currently enabled.
 
 ---
 
+#### `enableBluetooth()`
+
+```dart
+Future<bool> enableBluetooth()
+```
+
+Asks the user to turn Bluetooth on. On Android this shows the native system enable dialog.
+
+Returns `true` if Bluetooth was already on or the user accepted, and `false` if they declined — declining is a normal flow and does not throw.
+
+> **iOS and Windows:** these platforms do not allow turning the adapter on programmatically. The method simply returns the current state, equivalent to [`isOn`](#ison).
+
+Throws `BluetoothPrintException` with code `bluetooth_unavailable` (device has no Bluetooth), `no_activity` (no foreground Activity), `no_permissions` (BLUETOOTH_CONNECT denied), or `already_pending` (a request is already in flight).
+
+**Example:**
+
+```dart
+if (!await bluetoothPrint.enableBluetooth()) {
+  // User declined turning Bluetooth on
+  return;
+}
+final devices = await bluetoothPrint.startScan();
+```
+
+---
+
 ## BluetoothDevice
 
 `lib/bluetooth_print_model.dart`
@@ -483,6 +509,11 @@ class BluetoothPrintException implements Exception {
 | `print_test_error`    | `printTest()`           |
 | `availability_error`  | `isAvailable`           |
 | `power_error`         | `isOn`                  |
+| `bluetooth_unavailable`  | `enableBluetooth()`     |
+| `no_activity`            | `enableBluetooth()`     |
+| `no_permissions`         | `enableBluetooth()`     |
+| `already_pending`        | `enableBluetooth()`     |
+| `enable_bluetooth_error` | `enableBluetooth()`     |
 
 ---
 

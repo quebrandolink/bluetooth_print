@@ -296,6 +296,32 @@ Retorna `true` se o adaptador Bluetooth estiver habilitado.
 
 ---
 
+#### `enableBluetooth()`
+
+```dart
+Future<bool> enableBluetooth()
+```
+
+Pede ao usuário para ligar o Bluetooth. No Android exibe o diálogo nativo de ativação do sistema.
+
+Retorna `true` se o Bluetooth já estava ligado ou se o usuário aceitou, e `false` se ele recusou — recusar é fluxo normal e não gera exceção.
+
+> **iOS e Windows:** não é possível ligar o adaptador por código nessas plataformas. O método apenas retorna o estado atual, equivalente a [`isOn`](#ison).
+
+Lança `BluetoothPrintException` com código `bluetooth_unavailable` (dispositivo sem Bluetooth), `no_activity` (sem Activity em primeiro plano), `no_permissions` (BLUETOOTH_CONNECT negada) ou `already_pending` (já existe uma solicitação em andamento).
+
+**Exemplo:**
+
+```dart
+if (!await bluetoothPrint.enableBluetooth()) {
+  // Usuário recusou ligar o Bluetooth
+  return;
+}
+final devices = await bluetoothPrint.startScan();
+```
+
+---
+
 ## BluetoothDevice
 
 `lib/bluetooth_print_model.dart`
@@ -483,6 +509,11 @@ class BluetoothPrintException implements Exception {
 | `print_test_error`    | `printTest()`           |
 | `availability_error`  | `isAvailable`           |
 | `power_error`         | `isOn`                  |
+| `bluetooth_unavailable`  | `enableBluetooth()`     |
+| `no_activity`            | `enableBluetooth()`     |
+| `no_permissions`         | `enableBluetooth()`     |
+| `already_pending`        | `enableBluetooth()`     |
+| `enable_bluetooth_error` | `enableBluetooth()`     |
 
 ---
 

@@ -110,6 +110,9 @@ void BluetoothPrintPlugin::HandleMethodCall(
     result->Success(flutter::EncodableValue(CheckIsAvailable()));
   } else if (method == "isOn") {
     result->Success(flutter::EncodableValue(CheckIsOn()));
+  } else if (method == "enableBluetooth") {
+    // O Windows não expõe API para ligar o rádio; devolve o estado atual.
+    result->Success(flutter::EncodableValue(CheckIsOn()));
   } else if (method == "isConnected") {
     result->Success(flutter::EncodableValue(CheckIsConnected()));
 

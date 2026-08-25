@@ -1,3 +1,26 @@
+## 4.4.0
+
+* add `BluetoothPrint.enableBluetooth()`: asks the user to turn Bluetooth on
+  through the native `ACTION_REQUEST_ENABLE` dialog on Android. Returns `false`
+  when the user declines instead of throwing. On iOS and Windows, where the
+  adapter cannot be turned on programmatically, it reports the current state.
+* android: request `BLUETOOTH_CONNECT` at runtime before showing the enable
+  dialog, required since Android 12.
+* android: register the activity result listener as the plugin instance so it
+  can be removed in `tearDown()` — the previous anonymous lambda was duplicated
+  on every configuration change, replaying the pending call once per rotation.
+* android: always clear the pending call/result, so a declined request no longer
+  leaves state behind that a later result would replay.
+* android: guard against an empty `grantResults`, which crashed with
+  `ArrayIndexOutOfBoundsException` when the permission dialog was dismissed.
+* `enableBluetooth()` propagates the native error code (`bluetooth_unavailable`,
+  `no_activity`, `no_permissions`, `already_pending`) as
+  `BluetoothPrintException.code`.
+
+## 4.3.0
+
+* update sdk.
+
 ## 4.2.0
 
 * opt permission check

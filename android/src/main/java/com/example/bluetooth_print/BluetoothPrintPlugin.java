@@ -15,14 +15,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.RequiresApi;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.activity.result.ActivityResultCallback;
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 
 import com.gprinter.command.FactoryCommand;
@@ -34,6 +32,7 @@ import io.flutter.plugin.common.EventChannel.EventSink;
 import io.flutter.plugin.common.EventChannel.StreamHandler;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
+import io.flutter.plugin.common.PluginRegistry.ActivityResultListener;
 import io.flutter.plugin.common.PluginRegistry.RequestPermissionsResultListener;
 
 import java.util.ArrayList;
@@ -54,7 +53,8 @@ import java.util.Map;
  * @author thon
  */
 public class BluetoothPrintPlugin
-        implements FlutterPlugin, ActivityAware, MethodCallHandler, RequestPermissionsResultListener {
+        implements FlutterPlugin, ActivityAware, MethodCallHandler, RequestPermissionsResultListener,
+        ActivityResultListener {
     // Tag para logs
     private static final String TAG = "BluetoothPrintPlugin";
 
@@ -93,9 +93,16 @@ public class BluetoothPrintPlugin
     private MethodCall pendingCall;
     private Result pendingResult;
 
+    // Resultado pendente de uma chamada explícita a enableBluetooth()
+    private Result pendingEnableResult;
+
     // Códigos de requisição
     private static final int REQUEST_FINE_LOCATION_PERMISSIONS = 1452;
     private static final int REQUEST_ENABLE_BT = 1451;
+    // Ativação solicitada explicitamente via enableBluetooth()
+    private static final int REQUEST_ENABLE_BT_EXPLICIT = 1453;
+    // BLUETOOTH_CONNECT necessária para disparar ACTION_REQUEST_ENABLE no Android 12+
+    private static final int REQUEST_ENABLE_BT_PERMISSION = 1454;
 
     // Permissões necessárias para o Bluetooth
     private static String[] PERMISSIONS_LOCATION = {
@@ -127,25 +134,9 @@ public class BluetoothPrintPlugin
         activityBinding = binding;
 
         // Configura o listener para resultados de atividade (como ativação do
-        // Bluetooth)
-        activityBinding.addActivityResultListener((requestCode, resultCode, data) -> {
-            if (requestCode == REQUEST_ENABLE_BT) {
-                if (resultCode == Activity.RESULT_OK) {
-                    // Se o usuário ativou o Bluetooth, continua com o scan pendente
-                    if (pendingCall != null && pendingResult != null) {
-                        startScan(pendingCall, pendingResult);
-                    }
-                } else {
-                    // Usuário recusou ativar o Bluetooth
-                    if (pendingResult != null) {
-                        pendingResult.error("bluetooth_disabled", "Ativação do Bluetooth foi negada pelo usuário",
-                                null);
-                    }
-                }
-                return true;
-            }
-            return false;
-        });
+        // Bluetooth). Registrado como "this" para poder ser removido no tearDown --
+        // uma lambda anônima ficaria duplicada a cada mudança de configuração.
+        activityBinding.addActivityResultListener(this);
 
         // Configura o plugin com os bindings necessários
         setup(
@@ -168,6 +159,41 @@ public class BluetoothPrintPlugin
     @Override
     public void onReattachedToActivityForConfigChanges(ActivityPluginBinding binding) {
         onAttachedToActivity(binding);
+    }
+
+    @Override
+    public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
+        boolean enabled = resultCode == Activity.RESULT_OK;
+
+        // Ativação pedida explicitamente por enableBluetooth(): recusa não é erro.
+        if (requestCode == REQUEST_ENABLE_BT_EXPLICIT) {
+            Result enableResult = pendingEnableResult;
+            pendingEnableResult = null;
+            if (enableResult != null) {
+                enableResult.success(enabled);
+            }
+            return true;
+        }
+
+        // Diálogo disparado pelo startScan.
+        if (requestCode == REQUEST_ENABLE_BT) {
+            MethodCall call = pendingCall;
+            Result result = pendingResult;
+            pendingCall = null;
+            pendingResult = null;
+
+            if (result == null) {
+                return true;
+            }
+            if (enabled) {
+                startScan(call, result);
+            } else {
+                result.error("bluetooth_disabled", "Ativação do Bluetooth foi negada pelo usuário", null);
+            }
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -210,6 +236,7 @@ public class BluetoothPrintPlugin
     private void tearDown() {
         Log.i(TAG, "teardown");
         context = null;
+        activityBinding.removeActivityResultListener(this);
         activityBinding.removeRequestPermissionsResultListener(this);
         activityBinding = null;
         channel.setMethodCallHandler(null);
@@ -239,6 +266,9 @@ public class BluetoothPrintPlugin
                 break;
             case "isOn":
                 result.success(mBluetoothAdapter.isEnabled());
+                break;
+            case "enableBluetooth":
+                enableBluetooth(result);
                 break;
             case "isConnected":
                 result.success(threadPool != null);
@@ -282,6 +312,48 @@ public class BluetoothPrintPlugin
                 result.notImplemented();
                 break;
         }
+    }
+
+    /**
+     * Pede ao usuário para ligar o Bluetooth através do diálogo do sistema.
+     *
+     * O Android não permite que um app comum ligue o rádio sozinho:
+     * BluetoothAdapter.enable() é no-op a partir do Android 13. O caminho
+     * suportado é o intent ACTION_REQUEST_ENABLE, que o usuário confirma.
+     *
+     * @param result Resultado a ser retornado para o Flutter
+     */
+    private void enableBluetooth(Result result) {
+        // Adaptador nulo já foi tratado pelo guard no início de onMethodCall
+        if (mBluetoothAdapter.isEnabled()) {
+            result.success(true);
+            return;
+        }
+
+        if (activity == null) {
+            result.error("no_activity", "enableBluetooth requer uma Activity em primeiro plano", null);
+            return;
+        }
+
+        if (pendingEnableResult != null) {
+            result.error("already_pending", "Já existe uma solicitação de ativação em andamento", null);
+            return;
+        }
+
+        // No Android 12+ o intent só é exibido se BLUETOOTH_CONNECT já foi concedida
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && ContextCompat.checkSelfPermission(context,
+                        Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            pendingEnableResult = result;
+            ActivityCompat.requestPermissions(activity,
+                    new String[] { Manifest.permission.BLUETOOTH_CONNECT },
+                    REQUEST_ENABLE_BT_PERMISSION);
+            return;
+        }
+
+        pendingEnableResult = result;
+        Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+        activity.startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT_EXPLICIT);
     }
 
     /**
@@ -681,19 +753,44 @@ public class BluetoothPrintPlugin
 
     @Override
     public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        // Trata o resultado da solicitação de permissões
-        if (requestCode == REQUEST_FINE_LOCATION_PERMISSIONS) {
-            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Permissão concedida, continua com a varredura
-                startScan(pendingCall, pendingResult);
+        // grantResults vem vazio quando o usuário cancela o diálogo sem escolher
+        boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+
+        // Permissão pedida por enableBluetooth() antes de exibir o intent
+        if (requestCode == REQUEST_ENABLE_BT_PERMISSION) {
+            Result enableResult = pendingEnableResult;
+            pendingEnableResult = null;
+
+            if (enableResult == null) {
+                return true;
+            }
+            if (granted) {
+                // Reentra: agora a permissão existe e o intent pode ser disparado
+                enableBluetooth(enableResult);
             } else {
-                // Permissão negada, retorna erro
-                pendingResult.error("no_permissions", "este plugin requer permissões de localização para varredura",
-                        null);
-                pendingResult = null;
+                enableResult.error("no_permissions", "enableBluetooth requer a permissão BLUETOOTH_CONNECT", null);
             }
             return true;
         }
+
+        // Permissões pedidas pelo startScan
+        if (requestCode == REQUEST_FINE_LOCATION_PERMISSIONS) {
+            MethodCall call = pendingCall;
+            Result result = pendingResult;
+            pendingCall = null;
+            pendingResult = null;
+
+            if (result == null) {
+                return true;
+            }
+            if (granted) {
+                startScan(call, result);
+            } else {
+                result.error("no_permissions", "este plugin requer permissões de localização para varredura", null);
+            }
+            return true;
+        }
+
         return false;
     }
 

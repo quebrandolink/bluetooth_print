@@ -324,4 +324,26 @@ class BluetoothPrint {
       throw BluetoothPrintException('power_error', 'Erro ao verificar se está ligado: $e');
     }
   }
+
+  /// Pede ao usuário para ligar o bluetooth.
+  ///
+  /// No Android exibe o diálogo nativo de ativação do sistema. Retorna `true`
+  /// se o bluetooth já estava ligado ou se o usuário aceitou, e `false` se ele
+  /// recusou — recusar é fluxo normal, não gera exceção.
+  ///
+  /// Em Windows não é possível ligar o adaptador por código: o método apenas
+  /// retorna o estado atual, equivalente a [isOn].
+  ///
+  /// Lança [BluetoothPrintException] com código `bluetooth_unavailable` se o
+  /// dispositivo não tiver bluetooth, `no_activity` se não houver Activity em
+  /// primeiro plano, ou `no_permissions` se BLUETOOTH_CONNECT for negada.
+  Future<bool> enableBluetooth() async {
+    try {
+      return await _channel.invokeMethod<bool>('enableBluetooth') ?? false;
+    } on PlatformException catch (e) {
+      throw BluetoothPrintException(e.code, e.message ?? 'Erro ao ativar o bluetooth');
+    } catch (e) {
+      throw BluetoothPrintException('enable_bluetooth_error', 'Erro ao ativar o bluetooth: $e');
+    }
+  }
 }
