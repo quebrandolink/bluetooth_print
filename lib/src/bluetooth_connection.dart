@@ -19,6 +19,8 @@ class MethodChannelBluetoothConnection implements IBluetoothConnection {
     try {
       final result = await _channel.invokeMethod('connect', device.toJson());
       return result == true;
+    } on PlatformException catch (e) {
+      throw BluetoothPrintException(e.code, e.message ?? 'Erro ao conectar');
     } catch (e) {
       throw BluetoothPrintException('connect_error', 'Erro ao conectar: $e');
     }

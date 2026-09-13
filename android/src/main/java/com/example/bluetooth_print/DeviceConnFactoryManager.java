@@ -224,6 +224,19 @@ public class DeviceConnFactoryManager {
     }
 
     /**
+     * Indica se a impressora terminou o handshake e aceita comandos de impressao.
+     *
+     * getConnState() fica true assim que o socket abre, mas o tipo de comando
+     * (ESC/TSC/CPCL) so e conhecido quando queryPrinterCommand() recebe a
+     * resposta da impressora. Dados enviados antes disso sao descartados.
+     *
+     * @return true se a porta esta aberta e o tipo de comando ja foi descoberto
+     */
+    public boolean isReadyToPrint() {
+        return isOpenPort && currentPrinterCommand != null;
+    }
+
+    /**
      * Retorna o endereço MAC do dispositivo Bluetooth
      * 
      * @return Endereço MAC
@@ -341,16 +354,19 @@ public class DeviceConnFactoryManager {
      * Envia dados imediatamente para a impressora
      * 
      * @param data Dados a serem enviados (vetor de bytes)
+     * @return true se os bytes foram escritos na porta
      */
-    public void sendDataImmediately(final Vector<Byte> data) {
+    public boolean sendDataImmediately(final Vector<Byte> data) {
         if (this.mPort == null) {
-            return;
+            return false;
         }
         try {
             this.mPort.writeDataImmediately(data, 0, data.size());
+            return true;
         } catch (Exception e) {
             // Notifica desconexão anormal
             mHandler.obtainMessage(Constant.abnormal_Disconnection).sendToTarget();
+            return false;
         }
     }
 
@@ -445,7 +461,7 @@ public class DeviceConnFactoryManager {
                         sendDataImmediately(data);
                         queryPrinterCommandFlag++;
                     }
-                }), 1500, 1500, TimeUnit.MILLISECONDS);
+                }), 300, 800, TimeUnit.MILLISECONDS);
             }
         });
     }

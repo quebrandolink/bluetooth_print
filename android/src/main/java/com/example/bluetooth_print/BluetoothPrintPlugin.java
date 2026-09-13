@@ -16,6 +16,8 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.RequiresApi;
@@ -95,6 +97,9 @@ public class BluetoothPrintPlugin
 
     // Resultado pendente de uma chamada explícita a enableBluetooth()
     private Result pendingEnableResult;
+
+    // Entrega respostas do MethodChannel na thread principal
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     // Códigos de requisição
     private static final int REQUEST_FINE_LOCATION_PERMISSIONS = 1452;
@@ -568,42 +573,44 @@ public class BluetoothPrintPlugin
 
                         // Tenta conectar com timeout
                         final long startTime = System.currentTimeMillis();
-                        final long TIMEOUT_MS = 15000; // 15 segundos
+                        final long TIMEOUT_MS = 12000; // 12 segundos
 
                         // Modificado: openPort() retorna void, então chamamos diretamente
                         deviceConn.openPort();
 
-                        // Aguarda conexão ser estabelecida ou timeout
-                        while (!deviceConn.getConnState() &&
+                        // Espera o handshake ESC/TSC/CPCL, nao apenas a abertura do
+                        // socket: enquanto o tipo de comando e desconhecido, print()
+                        // nao consegue montar os bytes e descarta o job em silencio.
+                        while (!deviceConn.isReadyToPrint() &&
                                 (System.currentTimeMillis() - startTime) < TIMEOUT_MS) {
                             Thread.sleep(100);
                         }
 
-                        final boolean isConnected = deviceConn.getConnState();
-                        final String statusMessage = isConnected ? "Conectado com sucesso" : "Timeout na conexão";
+                        final boolean isConnected = deviceConn.isReadyToPrint();
+                        final String statusMessage = isConnected ? "Conectado com sucesso" : "Timeout no handshake";
 
                         Log.i(TAG, statusMessage + " - Dispositivo: " + address);
 
                         // Retorna resultado para o Flutter
-                        activity.runOnUiThread(() -> {
+                        replyOnUiThread(() -> {
                             if (isConnected) {
                                 result.success(true);
                             } else {
                                 result.error("connection_timeout",
-                                        "Falha ao estabelecer conexão após " + TIMEOUT_MS + "ms",
+                                        "Impressora não respondeu ao handshake ESC/TSC/CPCL após " + TIMEOUT_MS + "ms",
                                         null);
                             }
                         });
 
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
-                        activity.runOnUiThread(() -> {
+                        replyOnUiThread(() -> {
                             result.error("connection_interrupted",
                                     "Conexão interrompida: " + e.getMessage(),
                                     null);
                         });
                     } catch (Exception e) {
-                        activity.runOnUiThread(() -> {
+                        replyOnUiThread(() -> {
                             result.error("connection_error",
                                     "Erro durante a conexão: " + e.getMessage(),
                                     null);
@@ -682,14 +689,19 @@ public class BluetoothPrintPlugin
                 .getDeviceConnFactoryManagers().get(curMacAddress);
         if (deviceConnFactoryManager == null || !deviceConnFactoryManager.getConnState()) {
             result.error("not connect", "estado da conexão inválido", null);
+            return;
         }
 
         threadPool = ThreadPool.getInstantiation();
         threadPool.addSerialTask(new Runnable() {
             @Override
             public void run() {
-                assert deviceConnFactoryManager != null;
                 PrinterCommand printerCommand = deviceConnFactoryManager.getCurrentPrinterCommand();
+                if (printerCommand == null) {
+                    replyOnUiThread(() -> result.error("printer_not_ready",
+                            "A impressora ainda não respondeu o tipo de comando (ESC/TSC/CPCL)", null));
+                    return;
+                }
 
                 // Envia o comando de teste de acordo com o tipo de impressora
                 if (printerCommand == PrinterCommand.ESC) {
@@ -698,10 +710,12 @@ public class BluetoothPrintPlugin
                 } else if (printerCommand == PrinterCommand.TSC) {
                     deviceConnFactoryManager
                             .sendByteDataImmediately(FactoryCommand.printSelfTest(FactoryCommand.printerMode.TSC));
-                } else if (printerCommand == PrinterCommand.CPCL) {
+                } else {
                     deviceConnFactoryManager
                             .sendByteDataImmediately(FactoryCommand.printSelfTest(FactoryCommand.printerMode.CPCL));
                 }
+
+                replyOnUiThread(() -> result.success(true));
             }
         });
     }
@@ -720,35 +734,72 @@ public class BluetoothPrintPlugin
                 .getDeviceConnFactoryManagers().get(curMacAddress);
         if (deviceConnFactoryManager == null || !deviceConnFactoryManager.getConnState()) {
             result.error("not connect", "estado da conexão inválido", null);
+            return;
         }
 
-        if (args != null && args.containsKey("config") && args.containsKey("data")) {
-            final Map<String, Object> config = (Map<String, Object>) args.get("config");
-            final List<Map<String, Object>> list = (List<Map<String, Object>>) args.get("data");
-            if (list == null) {
-                return;
-            }
+        if (args == null || !args.containsKey("config") || !args.containsKey("data")) {
+            result.error("invalid_arguments", "por favor adicione config ou data", null);
+            return;
+        }
 
-            threadPool = ThreadPool.getInstantiation();
-            threadPool.addSerialTask(new Runnable() {
-                @Override
-                public void run() {
-                    assert deviceConnFactoryManager != null;
+        final Map<String, Object> config = (Map<String, Object>) args.get("config");
+        final List<Map<String, Object>> list = (List<Map<String, Object>>) args.get("data");
+        if (list == null) {
+            result.error("invalid_arguments", "a chave data nao pode ser nula", null);
+            return;
+        }
+
+        threadPool = ThreadPool.getInstantiation();
+        threadPool.addSerialTask(new Runnable() {
+            @Override
+            public void run() {
+                try {
                     PrinterCommand printerCommand = deviceConnFactoryManager.getCurrentPrinterCommand();
 
-                    // Converte e envia os dados de acordo com o tipo de impressora
-                    if (printerCommand == PrinterCommand.ESC) {
-                        deviceConnFactoryManager.sendDataImmediately(PrintContent.mapToReceipt(config, list));
-                    } else if (printerCommand == PrinterCommand.TSC) {
-                        deviceConnFactoryManager.sendDataImmediately(PrintContent.mapToLabel(config, list));
-                    } else if (printerCommand == PrinterCommand.CPCL) {
-                        deviceConnFactoryManager.sendDataImmediately(PrintContent.mapToCPCL(config, list));
+                    // Sem o tipo de comando nao ha dialeto para montar os bytes:
+                    // enviar aqui seria descartar o job sem aviso nenhum.
+                    if (printerCommand == null) {
+                        replyOnUiThread(() -> result.error("printer_not_ready",
+                                "A impressora ainda não respondeu o tipo de comando (ESC/TSC/CPCL)", null));
+                        return;
                     }
+
+                    // Converte e envia os dados de acordo com o tipo de impressora
+                    final boolean sent;
+                    if (printerCommand == PrinterCommand.ESC) {
+                        sent = deviceConnFactoryManager.sendDataImmediately(PrintContent.mapToReceipt(config, list));
+                    } else if (printerCommand == PrinterCommand.TSC) {
+                        sent = deviceConnFactoryManager.sendDataImmediately(PrintContent.mapToLabel(config, list));
+                    } else {
+                        sent = deviceConnFactoryManager.sendDataImmediately(PrintContent.mapToCPCL(config, list));
+                    }
+
+                    if (sent) {
+                        replyOnUiThread(() -> result.success(true));
+                    } else {
+                        replyOnUiThread(() -> result.error("print_failed",
+                                "Falha ao escrever os dados na impressora", null));
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Erro ao imprimir", e);
+                    replyOnUiThread(() -> result.error("print_error",
+                            "Erro ao imprimir: " + e.getMessage(), null));
                 }
-            });
-        } else {
-            result.error("invalid_arguments", "por favor adicione config ou data", null);
-        }
+            }
+        });
+    }
+
+    /**
+     * Entrega a resposta do MethodChannel na thread principal.
+     *
+     * As tarefas de conexao e impressao rodam no ThreadPool e podem terminar
+     * depois que a Activity foi destruida; postar no main looper evita o NPE que
+     * deixaria o Future do lado Dart pendente para sempre.
+     *
+     * @param reply Resposta a ser entregue
+     */
+    private void replyOnUiThread(Runnable reply) {
+        mainHandler.post(reply);
     }
 
     @Override

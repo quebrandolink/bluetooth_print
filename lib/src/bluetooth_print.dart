@@ -141,10 +141,14 @@ class BluetoothPrint {
   /// }
   /// ```
   ///
-  /// Lança [BluetoothPrintException] com código `connect_error` em falha.
+  /// Lança [BluetoothPrintException] com o código nativo da falha
+  /// (`connection_timeout` quando a impressora não responde ao handshake) ou
+  /// `connect_error` para erros inesperados.
   Future<bool> connect(BluetoothDevice device) async {
     try {
       return await _connection.connect(device);
+    } on BluetoothPrintException {
+      rethrow;
     } catch (e) {
       throw BluetoothPrintException('connect_error', 'Erro ao conectar: $e');
     }
@@ -225,10 +229,14 @@ class BluetoothPrint {
   ///
   /// Retorna `true` em caso de sucesso.
   ///
-  /// Lança [BluetoothPrintException] com código `print_receipt_error` em falha.
+  /// Lança [BluetoothPrintException] com o código nativo da falha
+  /// (`printer_not_ready`, `print_failed`, `not connect`) ou
+  /// `print_receipt_error` para erros inesperados.
   Future<bool> printReceipt({required Map<String, dynamic> config, required List<LineText> data}) async {
     try {
       return await _printer.printReceipt(config: config, data: data);
+    } on BluetoothPrintException {
+      rethrow;
     } catch (e) {
       throw BluetoothPrintException('print_receipt_error', 'Erro ao imprimir recibo: $e');
     }
@@ -263,10 +271,14 @@ class BluetoothPrint {
   ///
   /// Retorna `true` em caso de sucesso.
   ///
-  /// Lança [BluetoothPrintException] com código `print_label_error` em falha.
+  /// Lança [BluetoothPrintException] com o código nativo da falha
+  /// (`printer_not_ready`, `print_failed`, `not connect`) ou `print_label_error`
+  /// para erros inesperados.
   Future<bool> printLabel(Map<String, dynamic> config, List<LineText> data) async {
     try {
       return await _printer.printLabel(config: config, data: data);
+    } on BluetoothPrintException {
+      rethrow;
     } catch (e) {
       throw BluetoothPrintException('print_label_error', 'Erro ao imprimir etiqueta: $e');
     }
@@ -276,10 +288,14 @@ class BluetoothPrint {
   ///
   /// Útil para validar conexão e funcionamento básico sem montar [LineText].
   ///
-  /// Lança [BluetoothPrintException] com código `print_test_error` em falha.
+  /// Lança [BluetoothPrintException] com o código nativo da falha
+  /// (`printer_not_ready`, `not connect`) ou `print_test_error` para erros
+  /// inesperados.
   Future<dynamic> printTest() async {
     try {
       return await _printer.printTest();
+    } on BluetoothPrintException {
+      rethrow;
     } catch (e) {
       throw BluetoothPrintException('print_test_error', 'Erro no teste de impressão: $e');
     }

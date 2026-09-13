@@ -509,6 +509,10 @@ class BluetoothPrintException implements Exception {
 | `print_test_error`    | `printTest()`           |
 | `availability_error`  | `isAvailable`           |
 | `power_error`         | `isOn`                  |
+| `printer_not_ready`   | `printReceipt()`, `printLabel()`, `printTest()` |
+| `print_failed`        | `printReceipt()`, `printLabel()` |
+| `not connect`         | `printReceipt()`, `printLabel()`, `printTest()` |
+| `connection_timeout`  | `connect()`             |
 | `bluetooth_unavailable`  | `enableBluetooth()`     |
 | `no_activity`            | `enableBluetooth()`     |
 | `no_permissions`         | `enableBluetooth()`     |

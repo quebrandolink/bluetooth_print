@@ -32,6 +32,8 @@ class MethodChannelBluetoothPrinter implements IBluetoothPrinter {
     };
     try {
       await _channel.invokeMethod('printReceipt', args);
+    } on PlatformException catch (e) {
+      throw BluetoothPrintException(e.code, e.message ?? 'Erro ao imprimir recibo');
     } catch (e) {
       throw BluetoothPrintException('print_receipt_error', 'Erro ao imprimir recibo: $e');
     }
@@ -49,6 +51,8 @@ class MethodChannelBluetoothPrinter implements IBluetoothPrinter {
     };
     try {
       await _channel.invokeMethod('printLabel', args);
+    } on PlatformException catch (e) {
+      throw BluetoothPrintException(e.code, e.message ?? 'Erro ao imprimir etiqueta');
     } catch (e) {
       throw BluetoothPrintException('print_label_error', 'Erro ao imprimir etiqueta: $e');
     }
@@ -59,6 +63,8 @@ class MethodChannelBluetoothPrinter implements IBluetoothPrinter {
   Future<void> printTest() async {
     try {
       await _channel.invokeMethod('printTest');
+    } on PlatformException catch (e) {
+      throw BluetoothPrintException(e.code, e.message ?? 'Erro no teste de impressão');
     } catch (e) {
       throw BluetoothPrintException('print_test_error', 'Erro no teste de impressão: $e');
     }

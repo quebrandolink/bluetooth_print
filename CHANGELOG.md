@@ -1,3 +1,21 @@
+## 4.5.0
+
+* android: `printReceipt`/`printLabel`/`printTest` now always answer the
+  MethodChannel. The happy path queued the job on the thread pool and returned
+  without calling `result.success()`, so the Dart future never completed and the
+  caller stayed stuck in a "printing" state forever.
+* android: `connect()` now resolves only after the ESC/TSC/CPCL handshake, not
+  as soon as the socket opens. Printing in that window produced no bytes at all,
+  because `getCurrentPrinterCommand()` was still `null` and no branch matched.
+* android: the printer command probe starts after 300ms and retries every 800ms
+  (was 1500ms/1500ms), cutting the worst case (TSC, third attempt) from ~4.5s to
+  ~1.9s.
+* android: a write that fails is reported as `print_failed` instead of silently
+  passing — `sendDataImmediately` now returns whether the bytes reached the port.
+* android: `not connect` no longer falls through and submits a second reply
+  (`Reply already submitted`), and replies are posted to the main looper instead
+  of through the Activity, which may already be gone when the job finishes.
+
 ## 4.4.0
 
 * add `BluetoothPrint.enableBluetooth()`: asks the user to turn Bluetooth on
