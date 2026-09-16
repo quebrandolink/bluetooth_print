@@ -13,6 +13,28 @@
   mid-handshake, instead of spinning out the full 12s and blaming a timeout, and
   closes the port before reporting either failure so no socket or `PrinterReader`
   thread is left behind.
+* android: tapping a printer that is switched off now fails with the new
+  `printer_unreachable` code instead of `connection_lost` — the RFCOMM socket
+  never opened, so nothing was lost. That address is also dropped from the
+  session's device map, so it stops being re-emitted by every later scan.
+* android: `isConnected` answered `threadPool != null`, which is `true` forever
+  after the first connection attempt and never looked at a printer at all. It now
+  reports whether the current printer finished the handshake, the same criterion
+  `connect()` uses.
+* android: the `connected`/`disconnected` events on the state stream were emitted
+  for every Bluetooth device, so unrelated hardware (a headset, say) moved the
+  printer's state. `ACL_CONNECTED`/`ACL_DISCONNECTED` are now matched against the
+  connected printer's MAC, which is what `BluetoothPrintStatus` already documented.
+* example: handle a printer that goes away. The app now clears its connection
+  state on `disconnected`, catches errors from `printReceipt` (a second print
+  after powering the printer off threw an unhandled `not connect` exception) and
+  turns each error code into a readable message. When the adapter is off it now
+  asks to turn it on — on startup and from the search button, not just from a
+  separate button — and waits for the radio to actually reach the on state before
+  scanning, since the native dialog answers while it is still turning on.
+* test: cover `connect()` and the print methods, including that the native error
+  codes (`connection_lost`, `connection_timeout`, `not connect`,
+  `printer_not_ready`, `print_failed`) reach the caller as `BluetoothPrintException`.
 
 ## 4.5.0
 

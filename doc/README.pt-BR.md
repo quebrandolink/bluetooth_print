@@ -13,6 +13,7 @@
 
 | Versão do plugin | Versão do Flutter |
 | :--------------- | :---------------- |
+| 4.5.0            | Flutter 3.19+     |
 | 4.3.0            | Flutter 3.19+     |
 | 4.0.0            | Flutter 3.x       |
 | 3.0.0            | Flutter 2.x       |
@@ -24,6 +25,7 @@
 |                       | Android            | iOS                | Descrição                                               |
 | :-------------------- | :----------------: | :----------------: | :------------------------------------------------------ |
 | escaneamento          | :white_check_mark: | :white_check_mark: | Escaneia dispositivos Bluetooth próximos.               |
+| ligar o bluetooth     | :white_check_mark: |        —           | Pede ao usuário para ligar o adaptador (diálogo nativo).|
 | conexão               | :white_check_mark: | :white_check_mark: | Conecta a um dispositivo Bluetooth.                     |
 | desconexão            | :white_check_mark: | :white_check_mark: | Desconecta do dispositivo atual.                        |
 | estado                | :white_check_mark: | :white_check_mark: | Stream de mudanças de estado do Bluetooth.              |
@@ -41,7 +43,7 @@ Adicione a dependência no `pubspec.yaml`:
 dependencies:
   flutter:
     sdk: flutter
-  bluetooth_print: ^4.3.0
+  bluetooth_print: ^4.5.1
 ```
 
 ## Permissões
@@ -104,14 +106,45 @@ bluetoothPrint.scan(timeout: const Duration(seconds: 4)).listen((device) {
 });
 ```
 
-### Conectar
+### Ligar o bluetooth
+
+Se o adaptador estiver desligado, `enableBluetooth()` exibe o diálogo nativo do
+Android. Recusar é fluxo normal e devolve `false`, sem exceção:
 
 ```dart
-final conectado = await bluetoothPrint.connect(device);
-if (conectado) {
-  print('Conectado com sucesso!');
+if (!await bluetoothPrint.isOn) {
+  if (!await bluetoothPrint.enableBluetooth()) return; // usuário recusou
 }
 ```
+
+⚠️ O diálogo nativo responde assim que o usuário aceita, mas o rádio ainda passa
+por `turningOn`. Escanear imediatamente depois pode não encontrar nada — espere
+`isOn` virar `true` (ou o estado `BluetoothPrintStatus.on` no stream) antes de
+chamar `startScan()`. O `example/` traz esse encadeamento pronto.
+
+No Windows o adaptador não pode ser ligado por código: o método apenas devolve o
+estado atual, equivalente a `isOn`.
+
+### Conectar
+
+`connect()` só resolve depois que a impressora responde o handshake ESC/TSC/CPCL,
+com um limite de 12 segundos. Um `true` aqui significa "pronta para imprimir" —
+antes disso o tipo de comando é desconhecido e o job seria descartado em silêncio:
+
+```dart
+try {
+  if (await bluetoothPrint.connect(device)) {
+    print('Conectado com sucesso!');
+  }
+} on BluetoothPrintException catch (e) {
+  // connection_timeout: não respondeu em 12s
+  // connection_lost: o link caiu durante o handshake
+  print('${e.code}: ${e.message}');
+}
+```
+
+`await bluetoothPrint.isConnected` usa o mesmo critério e pode ser consultado a
+qualquer momento.
 
 ### Desconectar
 
@@ -120,6 +153,12 @@ await bluetoothPrint.disconnect();
 ```
 
 ### Escutar mudanças de estado
+
+`connected` e `disconnected` se referem à impressora conectada por `connect()` —
+o nativo compara cada evento com o MAC dela, então outros dispositivos Bluetooth
+(um fone, por exemplo) não mexem nesse estado. Trate `disconnected` como o sinal
+para desabilitar a impressão: é o aviso mais cedo de que a impressora foi
+desligada ou saiu de alcance.
 
 ```dart
 bluetoothPrint.state.listen((status) {
@@ -220,16 +259,40 @@ await bluetoothPrint.printLabel(config, linhas);
 
 ## Tratamento de Erros
 
-Todas as operações lançam `BluetoothPrintException` em caso de falha:
+Todas as operações lançam `BluetoothPrintException` em caso de falha. **Sempre
+envolva as chamadas de impressão em `try/catch`**: uma impressora desligada entre
+dois jobs faz o próximo falhar, e sem o `catch` isso vira uma exceção não tratada.
 
 ```dart
 try {
-  await bluetoothPrint.connect(device);
+  await bluetoothPrint.printReceipt(config: config, data: linhas);
 } on BluetoothPrintException catch (e) {
-  print('Código do erro: ${e.code}');
-  print('Mensagem: ${e.message}');
+  switch (e.code) {
+    case 'not connect':
+      // A impressora sumiu. Limpe o estado e peça nova conexão.
+      break;
+    case 'printer_not_ready':
+      // Conectada, mas ainda não informou o tipo de comando (ESC/TSC/CPCL).
+      break;
+    case 'print_failed':
+      // A escrita na porta falhou no meio do envio.
+      break;
+    default:
+      print('${e.code}: ${e.message}');
+  }
 }
 ```
+
+Os códigos mais comuns:
+
+| Código               | Quando acontece                                             |
+| :------------------- | :---------------------------------------------------------- |
+| `printer_unreachable`| A porta não abriu: desligada, fora de alcance ou já em uso.   |
+| `connection_timeout` | A impressora não respondeu ao handshake em 12s.              |
+| `connection_lost`    | A porta abriu e o link caiu durante o handshake.             |
+| `not connect`        | Imprimir sem impressora conectada (ou depois de ela cair).   |
+| `printer_not_ready`  | Conectada, mas o tipo de comando ainda é desconhecido.       |
+| `print_failed`       | Falha ao escrever os bytes na porta.                         |
 
 Veja todos os códigos de erro em [API.pt-BR.md](API.pt-BR.md#códigos-de-erro).
 

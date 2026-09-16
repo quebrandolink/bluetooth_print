@@ -275,9 +275,15 @@ public class BluetoothPrintPlugin
             case "enableBluetooth":
                 enableBluetooth(result);
                 break;
-            case "isConnected":
-                result.success(threadPool != null);
+            case "isConnected": {
+                // threadPool != null dizia apenas que alguma conexão ja' foi
+                // tentada. O que interessa e' a impressora atual ter concluido o
+                // handshake -- mesmo criterio que connect() usa para responder.
+                DeviceConnFactoryManager currentManager = DeviceConnFactoryManager
+                        .getDeviceConnFactoryManagers().get(curMacAddress);
+                result.success(currentManager != null && currentManager.isReadyToPrint());
                 break;
+            }
             case "startScan": {
                 // Verifica permissões antes de escanear
                 if (ContextCompat.checkSelfPermission(context,
@@ -577,6 +583,22 @@ public class BluetoothPrintPlugin
 
                         // Modificado: openPort() retorna void, então chamamos diretamente
                         deviceConn.openPort();
+
+                        // openPort() falha em silêncio: o sinal e' getConnState() seguir
+                        // false, ou seja o socket RFCOMM nunca conectou. Nao ha handshake
+                        // a esperar, e o endereco nao deve ficar registrado como usado --
+                        // senao o startScan o reemite em toda varredura seguinte.
+                        if (!deviceConn.getConnState()) {
+                            Log.i(TAG, "Impressora inalcançável - Dispositivo: " + address);
+                            DeviceConnFactoryManager.forget(address);
+                            replyOnUiThread(() -> {
+                                result.error("printer_unreachable",
+                                        "Não foi possível abrir a porta. A impressora está "
+                                                + "desligada, fora de alcance ou conectada a outro aparelho.",
+                                        null);
+                            });
+                            return;
+                        }
 
                         // Espera o handshake ESC/TSC/CPCL, nao apenas a abertura do
                         // socket: enquanto o tipo de comando e desconhecido, print()
@@ -880,13 +902,34 @@ public class BluetoothPrintPlugin
                     threadPool = null;
                     sink.success(intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1));
                 } else if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)) {
-                    sink.success(1); // Dispositivo
-                                     // conectado
+                    // connected/disconnected significam "a impressora": sem este
+                    // filtro um fone entrando ou saindo mexia no estado dela.
+                    if (isCurrentPrinter(intent)) {
+                        sink.success(1);
+                    }
                 } else if (BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(action)) {
-                    threadPool = null;
-                    sink.success(0); // Dispositivo
-                                     // desconectado
+                    if (isCurrentPrinter(intent)) {
+                        threadPool = null;
+                        sink.success(0);
+                    }
                 }
+            }
+
+            /**
+             * Indica se o evento ACL veio da impressora conectada por connect().
+             *
+             * @param intent Broadcast recebido
+             * @return true se EXTRA_DEVICE tem o MAC de curMacAddress
+             */
+            // A sobrecarga tipada de getParcelableExtra exige API 33; o minSdk
+            // do plugin e' 21, entao a forma antiga e' a unica disponivel.
+            @SuppressWarnings("deprecation")
+            private boolean isCurrentPrinter(Intent intent) {
+                if (curMacAddress == null) {
+                    return false;
+                }
+                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                return device != null && curMacAddress.equals(device.getAddress());
             }
         };
 

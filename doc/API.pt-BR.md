@@ -125,18 +125,42 @@ Stream broadcast que emite a lista atual e deduplicada de dispositivos descobert
 Future<bool> connect(BluetoothDevice device)
 ```
 
-Tenta conectar ao `device`. Retorna `true` em caso de sucesso.
+Conecta ao `device` e só resolve depois que a impressora responde o handshake
+ESC/TSC/CPCL — não apenas quando o socket abre. Até essa resposta chegar o
+dialeto de comandos é desconhecido e qualquer job de impressão seria descartado
+em silêncio; esperar aqui é o que faz um `true` significar "pronta para imprimir".
 
-Lança `BluetoothPrintException` com código `connect_error` em caso de falha.
+O handshake tem um orçamento de **12 segundos**. A sondagem cicla
+ESC → CPCL → TSC até a impressora responder ou esse prazo acabar; em caso de
+falha a porta é fechada antes do erro ser reportado, sem deixar socket nem
+thread de leitura pendurados.
+
+Retorna `true` em caso de sucesso.
 
 **Exemplo:**
 
 ```dart
-final conectado = await bluetoothPrint.connect(device);
-if (conectado) {
-  print('Conectado!');
+try {
+  if (await bluetoothPrint.connect(device)) {
+    print('Conectado!');
+  }
+} on BluetoothPrintException catch (e) {
+  print('${e.code}: ${e.message}');
 }
 ```
+
+**Erros:**
+
+| Código                   | Significado                                                     |
+| :----------------------- | :-------------------------------------------------------------- |
+| `printer_unreachable`    | A porta nunca abriu — desligada, fora de alcance ou conectada a outro aparelho. |
+| `connection_timeout`     | A impressora não respondeu ao handshake em 12s.                  |
+| `connection_lost`        | A porta abriu e o link caiu antes de o handshake concluir.       |
+| `connection_interrupted` | A thread de conexão foi interrompida.                            |
+| `connection_error`       | Falha inesperada durante a conexão.                              |
+| `connection_failed`      | Falha antes de a tentativa de conexão começar.                   |
+| `invalid_argument`       | Endereço MAC ausente ou malformado.                              |
+| `connect_error`          | O próprio canal de plataforma falhou.                            |
 
 ---
 
@@ -158,7 +182,10 @@ Lança `BluetoothPrintException` com código `disconnect_error` em caso de falha
 Future<bool> get isConnected
 ```
 
-Retorna `true` se um dispositivo estiver atualmente conectado.
+Retorna `true` somente quando há impressora conectada **e** o handshake
+ESC/TSC/CPCL já concluiu — a mesma condição em que
+[`connect()`](#connectbluetoothdevice-device) resolve. Um socket aberto mas ainda
+mudo devolve `false`, porque imprimir por ele não produziria nada.
 
 ---
 
@@ -264,12 +291,27 @@ Stream<BluetoothPrintStatus> get state
 
 Stream broadcast de mudanças de estado do adaptador Bluetooth e da conexão. Emite o estado atual imediatamente na primeira assinatura e a cada mudança subsequente.
 
+`connected` e `disconnected` se referem à **impressora passada para
+[`connect()`](#connectbluetoothdevice-device)**, não a dispositivos Bluetooth em
+geral: o nativo compara cada evento ACL com o MAC dessa impressora, então um fone
+entrando ou saindo não mexe no estado dela. `on`, `off`, `turningOn` e
+`turningOff` descrevem o adaptador e não são afetados.
+
+Um evento `disconnected` é o sinal mais cedo e mais confiável de que a impressora
+sumiu — use-o para desabilitar a impressão, em vez de esperar o próximo job
+falhar com `not connect`.
+
 **Exemplo:**
 
 ```dart
 bluetoothPrint.state.listen((status) {
-  if (status == BluetoothPrintStatus.connected) {
-    print('Impressora conectada');
+  switch (status) {
+    case BluetoothPrintStatus.connected:
+      print('Impressora conectada');
+    case BluetoothPrintStatus.disconnected:
+      print('Impressora sumiu — desabilite a impressão');
+    default:
+      break;
   }
 });
 ```
@@ -306,7 +348,9 @@ Pede ao usuário para ligar o Bluetooth. No Android exibe o diálogo nativo de a
 
 Retorna `true` se o Bluetooth já estava ligado ou se o usuário aceitou, e `false` se ele recusou — recusar é fluxo normal e não gera exceção.
 
-> **iOS e Windows:** não é possível ligar o adaptador por código nessas plataformas. O método apenas retorna o estado atual, equivalente a [`isOn`](#ison).
+> **Windows:** o adaptador não pode ser ligado por código, então o método retorna o estado atual, equivalente a [`isOn`](#ison).
+>
+> **iOS:** não implementado — a chamada falha com `enable_bluetooth_error`. Proteja com `Platform.isAndroid || Platform.isWindows`, ou use [`isOn`](#ison) e peça ao usuário para ligar o Bluetooth nos Ajustes.
 
 Lança `BluetoothPrintException` com código `bluetooth_unavailable` (dispositivo sem Bluetooth), `no_activity` (sem Activity em primeiro plano), `no_permissions` (BLUETOOTH_CONNECT negada) ou `already_pending` (já existe uma solicitação em andamento).
 
@@ -463,8 +507,8 @@ Enum que representa todos os estados possíveis do adaptador Bluetooth e da cone
 | `off`          | Adaptador Bluetooth desabilitado.                 |
 | `turningOn`    | Adaptador Bluetooth ligando.                      |
 | `turningOff`   | Adaptador Bluetooth desligando.                   |
-| `connected`    | Um dispositivo está conectado.                    |
-| `disconnected` | Nenhum dispositivo conectado.                     |
+| `connected`    | A impressora de `connect()` está conectada.       |
+| `disconnected` | Essa impressora não está mais conectada.          |
 | `unknown`      | Estado não pôde ser determinado.                  |
 
 ### Mapeamento de códigos nativos → enum
@@ -512,7 +556,14 @@ class BluetoothPrintException implements Exception {
 | `printer_not_ready`   | `printReceipt()`, `printLabel()`, `printTest()` |
 | `print_failed`        | `printReceipt()`, `printLabel()` |
 | `not connect`         | `printReceipt()`, `printLabel()`, `printTest()` |
-| `connection_timeout`  | `connect()`             |
+| `invalid_arguments`   | `printReceipt()`, `printLabel()` |
+| `printer_unreachable`    | `connect()`             |
+| `connection_timeout`     | `connect()`             |
+| `connection_lost`        | `connect()`             |
+| `connection_interrupted` | `connect()`             |
+| `connection_error`       | `connect()`             |
+| `connection_failed`      | `connect()`             |
+| `invalid_argument`       | `connect()`             |
 | `bluetooth_unavailable`  | `enableBluetooth()`     |
 | `no_activity`            | `enableBluetooth()`     |
 | `no_permissions`         | `enableBluetooth()`     |

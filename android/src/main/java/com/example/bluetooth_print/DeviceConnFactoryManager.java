@@ -170,6 +170,19 @@ public class DeviceConnFactoryManager {
     }
 
     /**
+     * Esquece completamente um endereço, chave inclusive.
+     *
+     * Diferente de closeAllPort(), que deixa a chave com valor nulo de propósito
+     * para o startScan lembrar das impressoras usadas na sessão. Use isto apenas
+     * quando o endereço nunca chegou a funcionar e não deve ser relembrado.
+     *
+     * @param macAddress Endereço MAC a remover
+     */
+    public static void forget(String macAddress) {
+        deviceConnFactoryManagers.remove(macAddress);
+    }
+
+    /**
      * Abre a porta de comunicação com a impressora
      */
     public void openPort() {
