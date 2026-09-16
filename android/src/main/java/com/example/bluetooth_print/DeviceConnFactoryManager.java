@@ -416,54 +416,55 @@ public class DeviceConnFactoryManager {
      */
     private void queryPrinterCommand() {
         queryPrinterCommandFlag = ESC;
-        ThreadPool.getInstantiation().addSerialTask(new Runnable() {
+        // A sondagem não pode ser enfileirada no ThreadPool serial: connect() já
+        // ocupa essa fila enquanto espera o handshake, então a sonda só rodaria
+        // depois do timeout -- nunca a tempo. Agenda direto no próprio executor.
+        final ThreadFactoryBuilder threadFactoryBuilder = new ThreadFactoryBuilder("Timer");
+        final ScheduledExecutorService scheduledExecutorService = new ScheduledThreadPoolExecutor(1,
+                threadFactoryBuilder);
+        scheduledExecutorService.scheduleAtFixedRate(threadFactoryBuilder.newThread(new Runnable() {
             @Override
             public void run() {
-                // Agenda uma tarefa periódica para enviar comandos de consulta
-                final ThreadFactoryBuilder threadFactoryBuilder = new ThreadFactoryBuilder("Timer");
-                final ScheduledExecutorService scheduledExecutorService = new ScheduledThreadPoolExecutor(1,
-                        threadFactoryBuilder);
-                scheduledExecutorService.scheduleAtFixedRate(threadFactoryBuilder.newThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (currentPrinterCommand == null && queryPrinterCommandFlag > TSC) {
-                            if (reader != null) {
-                                // Se não houve resposta após tentar todos os comandos, fecha a conexão
-                                reader.cancel();
-                                mPort.closePort();
-                                isOpenPort = false;
-                                scheduledExecutorService.shutdown();
-                            }
-                        }
-                        if (currentPrinterCommand != null) {
-                            if (!scheduledExecutorService.isShutdown()) {
-                                scheduledExecutorService.shutdown();
-                            }
-                            return;
-                        }
-                        switch (queryPrinterCommandFlag) {
-                            case ESC:
-                                sendCommand = esc;
-                                break;
-                            case TSC:
-                                sendCommand = tsc;
-                                break;
-                            case CPCL:
-                                sendCommand = cpcl;
-                                break;
-                            default:
-                                break;
-                        }
-                        Vector<Byte> data = new Vector<>(sendCommand.length);
-                        for (byte b : sendCommand) {
-                            data.add(b);
-                        }
-                        sendDataImmediately(data);
-                        queryPrinterCommandFlag++;
+                // Porta já fechada (closePort, desconexão anormal ou timeout do
+                // connect): para a sondagem em vez de escrever num mPort nulo.
+                if (mPort == null || !isOpenPort) {
+                    if (!scheduledExecutorService.isShutdown()) {
+                        scheduledExecutorService.shutdown();
                     }
-                }), 300, 800, TimeUnit.MILLISECONDS);
+                    return;
+                }
+                if (currentPrinterCommand != null) {
+                    if (!scheduledExecutorService.isShutdown()) {
+                        scheduledExecutorService.shutdown();
+                    }
+                    return;
+                }
+                // Tentou os três comandos sem resposta: recomeça o ciclo em vez de
+                // fechar a porta. Quem decide desistir é o timeout de connect().
+                if (queryPrinterCommandFlag > TSC) {
+                    queryPrinterCommandFlag = ESC;
+                }
+                switch (queryPrinterCommandFlag) {
+                    case ESC:
+                        sendCommand = esc;
+                        break;
+                    case TSC:
+                        sendCommand = tsc;
+                        break;
+                    case CPCL:
+                        sendCommand = cpcl;
+                        break;
+                    default:
+                        break;
+                }
+                Vector<Byte> data = new Vector<>(sendCommand.length);
+                for (byte b : sendCommand) {
+                    data.add(b);
+                }
+                sendDataImmediately(data);
+                queryPrinterCommandFlag++;
             }
-        });
+        }), 300, 800, TimeUnit.MILLISECONDS);
     }
 
     /**

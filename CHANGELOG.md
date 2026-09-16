@@ -1,3 +1,19 @@
+## 4.5.1
+
+* android: fix `connect()` always failing with `connection_timeout` since 4.5.0.
+  The printer command probe was queued on the shared serial `ThreadPool`, the very
+  queue `connect()` occupies while it waits for the handshake, so no ESC/TSC/CPCL
+  byte was ever sent inside the 12s window and `currentPrinterCommand` stayed
+  `null`. The probe now schedules itself directly on its own executor.
+* android: the probe cycles ESC/CPCL/TSC until `connect()` gives up, instead of
+  closing the port on its own after the third unanswered attempt (~2.7s), which
+  killed printers that answer slowly. It stops as soon as the port is gone, so a
+  closed port no longer throws an NPE that silently aborts the scheduled task.
+* android: `connect()` reports `connection_lost` right away when the link drops
+  mid-handshake, instead of spinning out the full 12s and blaming a timeout, and
+  closes the port before reporting either failure so no socket or `PrinterReader`
+  thread is left behind.
+
 ## 4.5.0
 
 * android: `printReceipt`/`printLabel`/`printTest` now always answer the

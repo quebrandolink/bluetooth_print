@@ -581,20 +581,38 @@ public class BluetoothPrintPlugin
                         // Espera o handshake ESC/TSC/CPCL, nao apenas a abertura do
                         // socket: enquanto o tipo de comando e desconhecido, print()
                         // nao consegue montar os bytes e descarta o job em silencio.
-                        while (!deviceConn.isReadyToPrint() &&
+                        // getConnState() também e' observado: se a porta cair no meio
+                        // da espera, falha na hora em vez de girar até o timeout.
+                        while (!deviceConn.isReadyToPrint() && deviceConn.getConnState() &&
                                 (System.currentTimeMillis() - startTime) < TIMEOUT_MS) {
                             Thread.sleep(100);
                         }
 
                         final boolean isConnected = deviceConn.isReadyToPrint();
-                        final String statusMessage = isConnected ? "Conectado com sucesso" : "Timeout no handshake";
+                        final boolean isLost = !isConnected && !deviceConn.getConnState();
+                        final String statusMessage = isConnected ? "Conectado com sucesso"
+                                : isLost ? "Conexão perdida durante o handshake"
+                                        : "Timeout no handshake";
 
                         Log.i(TAG, statusMessage + " - Dispositivo: " + address);
+
+                        if (!isConnected) {
+                            // Não deixa socket nem PrinterReader pendurados ao desistir.
+                            try {
+                                deviceConn.closePort();
+                            } catch (Exception ex) {
+                                Log.e(TAG, "Erro ao fechar porta após falha no handshake", ex);
+                            }
+                        }
 
                         // Retorna resultado para o Flutter
                         replyOnUiThread(() -> {
                             if (isConnected) {
                                 result.success(true);
+                            } else if (isLost) {
+                                result.error("connection_lost",
+                                        "A conexão com a impressora caiu antes do handshake ESC/TSC/CPCL",
+                                        null);
                             } else {
                                 result.error("connection_timeout",
                                         "Impressora não respondeu ao handshake ESC/TSC/CPCL após " + TIMEOUT_MS + "ms",
